@@ -11,3 +11,7 @@ node_modules/
 out/
 cache/
 dist/
+
+# Claude Code project config — local only, jangan ke GitHub
+CLAUDE.md
+.claude/
