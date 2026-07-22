@@ -52,6 +52,13 @@ contract DvPEscrowTest is WhisperDeskTestBase {
         assertEq(escrow.teeSigner(), newSigner);
     }
 
+    // audit note (22 Jul): setFeeTreasury must reject address(0), consistent with setTeeSigner.
+    function test_SetFeeTreasury_RevertsZeroAddress() public {
+        vm.prank(owner);
+        vm.expectRevert(DvPEscrow.ZeroAddress.selector);
+        escrow.setFeeTreasury(address(0));
+    }
+
     // =========================================================================================
     // deposit / withdraw — mandatory sub-task (a): committed-exposure counter
     // =========================================================================================

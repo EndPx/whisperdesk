@@ -453,7 +453,12 @@ contract DvPEscrow is ReentrancyGuardTransient {
         teeSigner = newSigner;
     }
 
+    /// @notice Sets the fee treasury. Reverts ZeroAddress() for consistency with setTeeSigner
+    /// (audit note, 22 Jul). NOTE(fee): feeTreasury + TAKER_FEE_BIPS are inert in v1
+    /// (TAKER_FEE_BIPS == 0). If TAKER_FEE_BIPS is ever raised, lock()/release()/refund() accounting
+    /// must also reserve, transfer, and decrement the fee — see design.md §14 / Step 5.
     function setFeeTreasury(address t) external onlyOwner {
+        if (t == address(0)) revert ZeroAddress();
         feeTreasury = t;
     }
 
