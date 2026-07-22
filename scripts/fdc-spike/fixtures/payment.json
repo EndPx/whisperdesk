@@ -1,0 +1,9 @@
+{
+  "txHash": "8B973EF7B688411836CD47CA7B86FBC50E47DD771B1E4CEB518609C002707274",
+  "makerAddress": "r4ndQ2Ro7DANzbcMnoidaCUhEa7gcLzxgm",
+  "takerAddress": "rLLsk7Ac3ea3SU9r833ExECW7Biht1wirW",
+  "amountDrops": "1000000",
+  "destinationTag": 12345,
+  "ledgerIndex": 19282921,
+  "submittedAt": "2026-07-22T19:16:34.301Z"
+}

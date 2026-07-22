@@ -1,0 +1,37 @@
+{
+  "txHash": "0x8B973EF7B688411836CD47CA7B86FBC50E47DD771B1E4CEB518609C002707274",
+  "abiEncodedRequest": "0x5852505061796d656e7400000000000000000000000000000000000000000000746573745852500000000000000000000000000000000000000000000000000028dbe0e661ae7721d8e8576743ad7d2bcf6e582efb34ce22c68ce142d69a23a48b973ef7b688411836cd47ca7b86fbc50e47dd771b1e4ceb518609c002707274000000000000000000000000470de46985939a7e09821a6e6a3ed1f415d50ed6",
+  "votingRoundId": 1403531,
+  "response": {
+    "attestationType": "0x5852505061796d656e7400000000000000000000000000000000000000000000",
+    "sourceId": "0x7465737458525000000000000000000000000000000000000000000000000000",
+    "votingRound": 1403531,
+    "lowestUsedTimestamp": 1784747780,
+    "requestBody": {
+      "transactionId": "0x8b973ef7b688411836cd47ca7b86fbc50e47dd771b1e4ceb518609c002707274",
+      "proofOwner": "0x470de46985939a7e09821a6e6a3ed1f415d50ed6"
+    },
+    "responseBody": {
+      "blockNumber": 19282921,
+      "blockTimestamp": 1784747780,
+      "sourceAddress": "r4ndQ2Ro7DANzbcMnoidaCUhEa7gcLzxgm",
+      "sourceAddressHash": "0x36d1074c3d27f1a9bd433863e46bfdfbf00879c1042bca8861979130265ec9ce",
+      "receivingAddressHash": "0xc3fdf597533b67ba54cb8a67a72d011d6a981bbc0fac0b8ed6fac011f8e2ddae",
+      "intendedReceivingAddressHash": "0xc3fdf597533b67ba54cb8a67a72d011d6a981bbc0fac0b8ed6fac011f8e2ddae",
+      "spentAmount": 1000012,
+      "intendedSpentAmount": 1000012,
+      "receivedAmount": 1000000,
+      "intendedReceivedAmount": 1000000,
+      "hasMemoData": false,
+      "firstMemoData": "0x",
+      "hasDestinationTag": true,
+      "destinationTag": 12345,
+      "status": 0
+    }
+  },
+  "proof": [
+    "0x665af88e2788c5e4fb5e325ce91c7df0b71f4f79f8ee30c8799be557055d0f8d",
+    "0xaf9e6ee8ec3a7a56e32414d7376f35572fc18676629fe80691df800c63ced9de",
+    "0x59574ebc53995c0492578cb540f2cf9988aa980a4e1d110439d99acd93cd6019"
+  ]
+}

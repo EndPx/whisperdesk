@@ -1,0 +1,19 @@
+{
+  "name": "fdc-spike",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Step 2 GO/NO-GO spike: XRPL testnet payment -> FDC XRPPayment attestation -> onchain verify on Coston2.",
+  "scripts": {
+    "dry-validate": "node dry-validate.mjs",
+    "pay": "node pay.mjs",
+    "attest": "node attest.mjs",
+    "verify": "node verify.mjs",
+    "run": "node run.mjs"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.4",
+    "xrpl": "^4.1.0"
+  }
+}
