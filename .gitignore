@@ -15,3 +15,7 @@ dist/
 # Claude Code project config — local only, jangan ke GitHub
 CLAUDE.md
 .claude/
+
+# Derived/tooling artifacts — local only
+graphify-out/
+.obsidian/
