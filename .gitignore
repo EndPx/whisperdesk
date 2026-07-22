@@ -1,0 +1,13 @@
+# Claude Code — personal, jangan di-commit
+CLAUDE.local.md
+.claude/settings.local.json
+
+# Secrets
+.env
+.env.*
+
+# Dependencies & artifacts (aktifkan sesuai stack nanti)
+node_modules/
+out/
+cache/
+dist/
