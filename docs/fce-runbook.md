@@ -2,8 +2,25 @@
 
 How to build and run the Flare Confidential Compute extension stack for WhisperDesk. The FCE clones
 (`fce-extension-scaffold`, `tee-node`, `tee-proxy`) live as **siblings of this repo** under
-`../fce/`. Status 22 Jul 2026: builds green, signing loop proven; the live Coston2 registration
-(irreversible) is intentionally deferred — see the warning below.
+`../fce/`.
+
+## ✅ LIVE on Coston2 (registered 23 Jul 2026)
+
+The WhisperDesk FCE extension is **registered and running live on Coston2**, hosted on a VPS behind
+`https://fce.endpx.cloud`:
+
+| Item | Value |
+|---|---|
+| Extension ID | `0x…010069` (65641) |
+| InstructionSender | `0x6C2CA15B0c9459a71807e6Fb134874609E9c8790` |
+| TEE machine / signer | `0x1832e33F99cF5628f6Dc7Ae34e6011995BFdE4BD` |
+| Public ext-proxy | `https://fce.endpx.cloud/info` (200) |
+| Attestation | `magic_pass` (simulated-TEE; MODE=1) |
+
+`DvPEscrow.setTeeSigner` points our escrow (`0xf8A5…601e`) at the live TEE address, so the escrow's
+`lock()` accepts signatures produced by the running enclave. The generic FCE loop is proven
+end-to-end (`test.sh`: SAY_HELLO/SAY_GOODBYE instruction round-trip through the chain relay). See
+`.claude/context/deployments.md` for the full record. The steps below document how it was brought up.
 
 ## Environment gotchas (must-know)
 
