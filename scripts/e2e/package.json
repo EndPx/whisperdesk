@@ -1,0 +1,16 @@
+{
+  "name": "whisperdesk-e2e",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Step 5 E2E runners: full happy-path (lock -> real XRPL payment -> fresh FDC proof -> release) and default-path (lock -> no payment -> refund) against a deployed DvPEscrow integration instance (script/DeployIntegration.s.sol).",
+  "scripts": {
+    "happy-path": "node happy-path.mjs",
+    "default-path": "node default-path.mjs"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.4",
+    "xrpl": "^4.1.0"
+  }
+}
