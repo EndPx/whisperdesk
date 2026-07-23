@@ -24,3 +24,4 @@ graphify-out/
 .playwright-mcp/
 whisperdesk-*.jpeg
 flow*.jpeg
+sim*.jpeg

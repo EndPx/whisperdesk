@@ -136,6 +136,18 @@ body {
   box-shadow: 0 0 8px 1px color-mix(in oklab, var(--color-ice) 70%, transparent);
 }
 
+/* Balance value just changed — a quick settle-in pop. Keyed on value so React
+   remounts the span and the animation replays. Neutralized by the
+   prefers-reduced-motion block below. */
+@keyframes balance-pop {
+  0% { opacity: 0; transform: translateY(-3px) scale(0.94); }
+  55% { opacity: 1; }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.balance-pop {
+  animation: balance-pop 420ms ease-out;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.001ms !important;
