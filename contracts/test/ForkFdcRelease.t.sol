@@ -99,7 +99,8 @@ contract ForkFdcReleaseTest is WhisperDeskTestBase {
             SOURCE_ID,
             feeTreasury,
             SETTLEMENT_WINDOW,
-            ATTESTATION_BUDGET
+            ATTESTATION_BUDGET,
+            MIN_BLOCK
         );
         bondLedger.setEscrow(address(escrow));
         vm.stopPrank();
@@ -196,7 +197,8 @@ contract ForkFdcReleaseTest is WhisperDeskTestBase {
             SOURCE_ID,
             feeTreasury,
             SETTLEMENT_WINDOW,
-            ATTESTATION_BUDGET
+            ATTESTATION_BUDGET,
+            MIN_BLOCK
         );
         localBondLedger.setEscrow(address(localEscrow));
         vm.stopPrank();

@@ -86,8 +86,19 @@ contract MatcherToLockTest is Test {
         internal
         returns (DvPEscrow escrow)
     {
+        // 5_000e6 matches the golden vectors' amountFxrp (asserted against MIN_BLOCK_FXRP below) —
+        // this harness proves lock() acceptance at the canonical mainnet minimum block size.
         DvPEscrow tmp = new DvPEscrow(
-            fxrp, bondLedger, teeSigner_, ftso, fdc, bytes32("testXRP"), feeTreasury, settlementWindow, attestationBudget
+            fxrp,
+            bondLedger,
+            teeSigner_,
+            ftso,
+            fdc,
+            bytes32("testXRP"),
+            feeTreasury,
+            settlementWindow,
+            attestationBudget,
+            5_000e6
         );
         vm.etch(target, address(tmp).code);
 

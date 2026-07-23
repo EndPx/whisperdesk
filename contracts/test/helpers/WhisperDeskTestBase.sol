@@ -22,6 +22,9 @@ abstract contract WhisperDeskTestBase is Test {
     uint32 internal constant SETTLEMENT_WINDOW = 1800;
     uint32 internal constant ATTESTATION_BUDGET = 360;
     uint32 internal constant PAYMENT_WINDOW = SETTLEMENT_WINDOW - ATTESTATION_BUDGET;
+    // Mirrors DvPEscrow.REFUND_GRACE (design.md §14) — kept as a literal here (rather than read
+    // from `escrow.REFUND_GRACE()`) so fixture constants stay usable in `internal pure` contexts.
+    uint32 internal constant REFUND_GRACE = 120;
 
     bytes32 internal constant SOURCE_ID = bytes32("testXRP");
     bytes32 internal constant ATTESTATION_TYPE = bytes32("XRPPayment");
@@ -66,7 +69,8 @@ abstract contract WhisperDeskTestBase is Test {
             SOURCE_ID,
             feeTreasury,
             SETTLEMENT_WINDOW,
-            ATTESTATION_BUDGET
+            ATTESTATION_BUDGET,
+            MIN_BLOCK
         );
         bondLedger.setEscrow(address(escrow));
         vm.stopPrank();

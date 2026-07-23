@@ -25,7 +25,6 @@ contract DvPEscrow is ReentrancyGuardTransient {
     // Policy constants & window parameters (design.md §3.2)
     // ---------------------------------------------------------------------
 
-    uint256 public constant MIN_BLOCK_FXRP = 5_000e6; // 5,000 FXRP, 6-dec raw
     uint16 public constant BAND_BIPS = 100; // +/-1.0% vs FTSOv2 XRP/USD mid (inclusive)
     uint16 public constant BOND_BIPS = 100; // maker bond = 1% of notional
     uint32 public constant MAX_ORACLE_AGE = 60; // FTSOv2 staleness bound, seconds
@@ -36,6 +35,25 @@ contract DvPEscrow is ReentrancyGuardTransient {
     uint32 public immutable SETTLEMENT_WINDOW; // canonical deploy: 1800 s
     uint32 public immutable ATTESTATION_BUDGET; // canonical deploy: 360 s
     uint32 public immutable PAYMENT_WINDOW; // = SETTLEMENT_WINDOW - ATTESTATION_BUDGET
+
+    /// @notice Minimum FXRP notional a single match may lock, priced at the FTSOv2 mid inside
+    /// lock() (design.md §3.2). Step 5: promoted from a hardcoded `constant` to a constructor-set
+    /// `immutable` so a testnet/demo deploy can use a small block size — at the canonical 5,000
+    /// FXRP mainnet value, priced at the live XRP/USD mid, a single block requires ~5,000 XRP of
+    /// counter-payment, which is far beyond what small testnet-funded XRPL accounts can move.
+    /// Canonical/mainnet deploys MUST pass 5_000e6 here; smaller values (e.g. 1e6 = 1 FXRP) are for
+    /// testnet/demo integration deploys ONLY (see script/DeployIntegration.s.sol).
+    uint256 public immutable MIN_BLOCK_FXRP;
+
+    /// @notice Grace period (seconds) added on top of `refundAfter` before `refund()` becomes
+    /// callable (design.md §14 "Refund/release race, narrowed not eliminated"). An honest maker's
+    /// XRPL payment can be broadcast right up to `paymentDeadline` (inside `PAYMENT_WINDOW`) and
+    /// still need up to `ATTESTATION_BUDGET` seconds for the FDC proof to land and for `release()`
+    /// to be called; without a grace window a dishonest taker could call `refund()` the instant
+    /// `refundAfter` is crossed and win the race against a fully honest, on-time relayer. Widening
+    /// the required margin between `refundAfter` and the earliest possible `refund()` call narrows
+    /// (does not eliminate — see design.md §14 item 1) that race.
+    uint32 public immutable REFUND_GRACE = 120;
 
     // ---------------------------------------------------------------------
     // Immutables / config (design.md §3.3)
@@ -187,6 +205,8 @@ contract DvPEscrow is ReentrancyGuardTransient {
     /// @param settlementWindow_ seconds from lock() to refund()-eligibility (canonical: 1800)
     /// @param attestationBudget_ seconds reserved at the tail of the settlement window for FDC
     /// proof round-trip; PAYMENT_WINDOW = settlementWindow_ - attestationBudget_ (canonical: 360)
+    /// @param minBlockFxrp_ minimum FXRP notional per match, raw 6-dec (canonical/mainnet: 5_000e6;
+    /// testnet/demo deploys should pass a much smaller value — see MIN_BLOCK_FXRP natspec above)
     constructor(
         IERC20 fxrp,
         IBondLedger bondLedger,
@@ -196,7 +216,8 @@ contract DvPEscrow is ReentrancyGuardTransient {
         bytes32 expectedSourceId,
         address feeTreasury_,
         uint32 settlementWindow_,
-        uint32 attestationBudget_
+        uint32 attestationBudget_,
+        uint256 minBlockFxrp_
     ) {
         if (teeSigner_ == address(0)) revert ZeroAddress();
         if (address(fxrp) == address(0)) revert ZeroAddress();
@@ -217,6 +238,7 @@ contract DvPEscrow is ReentrancyGuardTransient {
         SETTLEMENT_WINDOW = settlementWindow_;
         ATTESTATION_BUDGET = attestationBudget_;
         PAYMENT_WINDOW = settlementWindow_ - attestationBudget_;
+        MIN_BLOCK_FXRP = minBlockFxrp_;
     }
 
     // =========================================================================================
@@ -421,13 +443,17 @@ contract DvPEscrow is ReentrancyGuardTransient {
         emit MatchReleased(matchId, m.maker, m.amountFxrp, txId);
     }
 
-    /// @notice After `refundAfter`, returns principal to the taker and slashes 100% of the maker
-    /// bond to the taker. Permissionless — "auto-refund" means anyone (including the taker) may
-    /// call this once the deadline has passed.
+    /// @notice After `refundAfter + REFUND_GRACE`, returns principal to the taker and slashes 100%
+    /// of the maker bond to the taker. Permissionless — "auto-refund" means anyone (including the
+    /// taker) may call this once the deadline (plus grace) has passed.
+    /// @dev The `REFUND_GRACE` margin (design.md §14) exists so an honest maker whose XRPL payment
+    /// lands right at the edge of `PAYMENT_WINDOW` still has time for the FDC proof to arrive and
+    /// `release()` to be called before `refund()` unlocks — narrowing, not eliminating, the
+    /// refund/release race.
     function refund(bytes32 matchId) external nonReentrant {
         Match storage m = matches[matchId];
         if (m.state != MatchState.Locked) revert NotLocked(matchId);
-        if (block.timestamp <= m.refundAfter) revert RefundTooEarly(m.refundAfter);
+        if (block.timestamp <= m.refundAfter + REFUND_GRACE) revert RefundTooEarly(m.refundAfter);
 
         m.state = MatchState.Refunded;
         // See the matching NOTE in release(): armed is decremented alongside committed for the

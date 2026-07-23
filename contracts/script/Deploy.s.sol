@@ -19,6 +19,7 @@ contract Deploy is Script {
     // v1.1 policy windows (design.md §3.2)
     uint32 constant SETTLEMENT_WINDOW = 1800; // 30 min
     uint32 constant ATTESTATION_BUDGET = 360; // 6 min
+    uint256 constant MIN_BLOCK_FXRP = 5_000e6; // canonical/mainnet minimum block size
 
     function run() external {
         uint256 pk = vm.envUint("PRIVATE_KEY");
@@ -46,7 +47,8 @@ contract Deploy is Script {
             bytes32("testXRP"),
             dev, // feeTreasury
             SETTLEMENT_WINDOW,
-            ATTESTATION_BUDGET
+            ATTESTATION_BUDGET,
+            MIN_BLOCK_FXRP
         );
 
         bond.setEscrow(address(escrow));

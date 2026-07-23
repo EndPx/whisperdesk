@@ -169,8 +169,11 @@ contract Handler is Test {
         if (!isOpen[matchId]) return;
 
         (address t,,,,,, uint40 refundAfter, uint128 amountFxrp,,,) = _readMatch(matchId);
-        if (block.timestamp <= refundAfter) {
-            vm.warp(block.timestamp + uint256(refundAfter) - block.timestamp + 1 + (warpSeed % 100));
+        // REFUND_GRACE (design.md §14): refund() only unlocks strictly after
+        // refundAfter + escrow.REFUND_GRACE(), so the warp target must clear that too.
+        uint256 earliestRefundable = uint256(refundAfter) + escrow.REFUND_GRACE();
+        if (block.timestamp <= earliestRefundable) {
+            vm.warp(earliestRefundable + 1 + (warpSeed % 100));
         }
         try escrow.refund(matchId) {
             isOpen[matchId] = false;
@@ -236,7 +239,7 @@ contract InvariantsTest is StdInvariant, Test {
         ftso = new MockFtsoV2();
         fdc = new MockFdcVerification();
         escrow = new DvPEscrow(
-            fxrp, bondLedger, teeSigner, ftso, fdc, bytes32("testXRP"), makeAddr("feeTreasury"), 1800, 360
+            fxrp, bondLedger, teeSigner, ftso, fdc, bytes32("testXRP"), makeAddr("feeTreasury"), 1800, 360, 5_000e6
         );
         bondLedger.setEscrow(address(escrow));
         vm.stopPrank();

@@ -17,19 +17,39 @@ contract DvPEscrowTest is WhisperDeskTestBase {
 
     function test_Constructor_RevertsZeroAddress_TeeSigner() public {
         vm.expectRevert(DvPEscrow.ZeroAddress.selector);
-        new DvPEscrow(fxrp, bondLedger, address(0), ftso, fdc, SOURCE_ID, feeTreasury, SETTLEMENT_WINDOW, ATTESTATION_BUDGET);
+        new DvPEscrow(
+            fxrp, bondLedger, address(0), ftso, fdc, SOURCE_ID, feeTreasury, SETTLEMENT_WINDOW, ATTESTATION_BUDGET, MIN_BLOCK
+        );
     }
 
     function test_Constructor_RevertsZeroAddress_Fxrp() public {
         vm.expectRevert(DvPEscrow.ZeroAddress.selector);
         new DvPEscrow(
-            MockFXRP(address(0)), bondLedger, teeSigner, ftso, fdc, SOURCE_ID, feeTreasury, SETTLEMENT_WINDOW, ATTESTATION_BUDGET
+            MockFXRP(address(0)),
+            bondLedger,
+            teeSigner,
+            ftso,
+            fdc,
+            SOURCE_ID,
+            feeTreasury,
+            SETTLEMENT_WINDOW,
+            ATTESTATION_BUDGET,
+            MIN_BLOCK
         );
     }
 
     function test_Constructor_RevertsInvalidWindowConfig() public {
         vm.expectRevert(DvPEscrow.InvalidWindowConfig.selector);
-        new DvPEscrow(fxrp, bondLedger, teeSigner, ftso, fdc, SOURCE_ID, feeTreasury, 100, 100);
+        new DvPEscrow(fxrp, bondLedger, teeSigner, ftso, fdc, SOURCE_ID, feeTreasury, 100, 100, MIN_BLOCK);
+    }
+
+    /// @notice Step 5: MIN_BLOCK_FXRP is now constructor-set immutable — a testnet/demo instance
+    /// can use a small block size (e.g. 1 FXRP) instead of the canonical 5,000 FXRP.
+    function test_Constructor_SetsCustomMinBlockFxrp() public {
+        DvPEscrow small = new DvPEscrow(
+            fxrp, bondLedger, teeSigner, ftso, fdc, SOURCE_ID, feeTreasury, SETTLEMENT_WINDOW, ATTESTATION_BUDGET, ONE_FXRP
+        );
+        assertEq(small.MIN_BLOCK_FXRP(), ONE_FXRP);
     }
 
     function test_SetTeeSigner_RevertsZeroAddress() public {
@@ -675,7 +695,16 @@ contract DvPEscrowTest is WhisperDeskTestBase {
         vm.startPrank(owner);
         BondLedger bondLedger2 = new BondLedger(fxrp);
         DvPEscrow escrow2 = new DvPEscrow(
-            fxrp, bondLedger2, teeSigner, ftso, fdc, SOURCE_ID, feeTreasury, SETTLEMENT_WINDOW, ATTESTATION_BUDGET
+            fxrp,
+            bondLedger2,
+            teeSigner,
+            ftso,
+            fdc,
+            SOURCE_ID,
+            feeTreasury,
+            SETTLEMENT_WINDOW,
+            ATTESTATION_BUDGET,
+            MIN_BLOCK
         );
         bondLedger2.setEscrow(address(escrow2));
         vm.stopPrank();
@@ -742,7 +771,7 @@ contract DvPEscrowTest is WhisperDeskTestBase {
         _lockDefaultMatch(matchId);
         (,,,,,, uint40 refundAfter,,,,) = _readMatch(matchId);
 
-        vm.warp(refundAfter + 1);
+        vm.warp(refundAfter + REFUND_GRACE + 1);
         vm.expectEmit(true, true, false, true, address(escrow));
         emit DvPEscrow.MatchRefunded(matchId, taker, MIN_BLOCK, MIN_BLOCK / 100);
         escrow.refund(matchId);
@@ -757,7 +786,7 @@ contract DvPEscrowTest is WhisperDeskTestBase {
         bytes32 matchId = keccak256("m-refund-bond");
         _lockDefaultMatch(matchId);
         (,,,,,, uint40 refundAfter,,, uint128 bondAmount,) = _readMatch(matchId);
-        vm.warp(refundAfter + 1);
+        vm.warp(refundAfter + REFUND_GRACE + 1);
 
         uint256 takerBalBefore = fxrp.balanceOf(taker);
         escrow.refund(matchId);
@@ -774,6 +803,56 @@ contract DvPEscrowTest is WhisperDeskTestBase {
         escrow.refund(matchId);
     }
 
+    /// @notice Proving test for the REFUND_GRACE fix (design.md §14 item 1): refundAfter alone is
+    /// no longer sufficient — refund() must still revert anywhere strictly inside the grace window,
+    /// including exactly at the `refundAfter + REFUND_GRACE` boundary.
+    function test_Refund_RevertsRefundTooEarly_AtExactGraceBoundary() public {
+        bytes32 matchId = keccak256("m-grace-boundary");
+        _lockDefaultMatch(matchId);
+        (,,,,,, uint40 refundAfter,,,,) = _readMatch(matchId);
+
+        assertEq(escrow.REFUND_GRACE(), REFUND_GRACE);
+
+        vm.warp(refundAfter + REFUND_GRACE); // exactly at the boundary — still too early
+        vm.expectRevert(abi.encodeWithSelector(DvPEscrow.RefundTooEarly.selector, refundAfter));
+        escrow.refund(matchId);
+
+        vm.warp(refundAfter + REFUND_GRACE + 1); // one second later — now callable
+        escrow.refund(matchId); // must not revert
+    }
+
+    /// @notice Proving test for the REFUND_GRACE fix (design.md §14 item 1): an honest maker who
+    /// paid before `paymentDeadline` must still be able to have their FDC proof consumed by
+    /// release() even if the proof lands shortly after `refundAfter`, as long as it is within
+    /// REFUND_GRACE — and a taker racing to snipe refund() in that exact window must fail.
+    function test_Release_SucceedsWithinRefundGrace_AndRefundRevertsInGraceWindow() public {
+        bytes32 matchId = keccak256("m-grace-window");
+        _lockDefaultMatch(matchId);
+        (,,,,, uint40 paymentDeadline, uint40 refundAfter,,,,) = _readMatch(matchId);
+
+        // Honest maker paid before the payment deadline.
+        IXRPPayment.Proof memory proof = _validProof(matchId, keccak256("tx-grace"));
+        proof.data.responseBody.blockTimestamp = paymentDeadline - 1;
+
+        // The relayer's FDC proof lands shortly after refundAfter, still within REFUND_GRACE.
+        vm.warp(refundAfter + REFUND_GRACE - 1);
+
+        // A taker trying to snipe refund() in this exact window must still fail.
+        vm.expectRevert(abi.encodeWithSelector(DvPEscrow.RefundTooEarly.selector, refundAfter));
+        escrow.refund(matchId);
+
+        // The honest release() still succeeds.
+        escrow.release(matchId, proof);
+        (,,, DvPEscrow.MatchState state,,,,,,,) = _readMatch(matchId);
+        assertEq(uint8(state), uint8(DvPEscrow.MatchState.Released));
+        assertEq(fxrp.balanceOf(maker), MIN_BLOCK);
+
+        // And refund() is now permanently unavailable for this match (already Released).
+        vm.warp(refundAfter + REFUND_GRACE + 1);
+        vm.expectRevert(abi.encodeWithSelector(DvPEscrow.NotLocked.selector, matchId));
+        escrow.refund(matchId);
+    }
+
     function test_Refund_RevertsNotLocked_UnknownMatch() public {
         vm.expectRevert(abi.encodeWithSelector(DvPEscrow.NotLocked.selector, keccak256("nope")));
         escrow.refund(keccak256("nope"));
@@ -783,7 +862,7 @@ contract DvPEscrowTest is WhisperDeskTestBase {
         bytes32 matchId = keccak256("m-double-refund");
         _lockDefaultMatch(matchId);
         (,,,,,, uint40 refundAfter,,,,) = _readMatch(matchId);
-        vm.warp(refundAfter + 1);
+        vm.warp(refundAfter + REFUND_GRACE + 1);
         escrow.refund(matchId);
         vm.expectRevert(abi.encodeWithSelector(DvPEscrow.NotLocked.selector, matchId));
         escrow.refund(matchId);
