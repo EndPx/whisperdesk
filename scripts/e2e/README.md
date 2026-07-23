@@ -2,8 +2,8 @@
 
 Two Node scripts that exercise a deployed `DvPEscrow` integration instance
 (`contracts/script/DeployIntegration.s.sol`) end-to-end against **live** Coston2 + XRPL Testnet +
-the real FDC verifier/DA layer. Neither script was executed by the agent that wrote them — this
-is the instructor's live-network trigger.
+the real FDC verifier/DA layer. Both scripts have been executed successfully on live
+Coston2 — see the receipts in the root `README.md`.
 
 ## 1. Deploy the integration instance
 
