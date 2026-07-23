@@ -1,126 +1,134 @@
 type Row = { text: string };
 
 /* ---------------------------------------------------------------------------
-   On-brand inline illustrations — stroke-based, ~2px, monochrome + one accent.
-   No external images. Kept intentionally simple/geometric to match the
-   machined-metal panel language.
+   The illustration is a single idea shown twice: the *same* order ticket, once
+   exposed and once sealed. Left ticket is fully legible (iron-red) — the market
+   reads your side and size. Right ticket has those exact fields redacted (ice)
+   — sealed inside a TEE, nothing to read. Same layout on both, so the only
+   thing the eye catches is: readable vs blacked-out.
 --------------------------------------------------------------------------- */
 
-function WatchedOrderIllustration() {
+function IconEye({ className }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 360 128"
-      fill="none"
-      className="w-full h-auto"
-      aria-hidden="true"
-    >
-      {/* the open order card, sitting exposed in the middle */}
-      <rect
-        x="118"
-        y="40"
-        width="124"
-        height="66"
-        rx="3"
-        stroke="var(--color-iron-red)"
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+      <path
+        d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z"
+        stroke="currentColor"
         strokeWidth="2"
-        strokeDasharray="5 4"
-        fill="color-mix(in oklab, var(--color-iron-red) 6%, transparent)"
+        strokeLinejoin="round"
       />
-      <line x1="134" y1="58" x2="226" y2="58" stroke="var(--color-iron-red)" strokeWidth="2" opacity="0.6" />
-      <line x1="134" y1="70" x2="206" y2="70" stroke="var(--color-iron-red)" strokeWidth="2" opacity="0.4" />
-      <line x1="134" y1="82" x2="216" y2="82" stroke="var(--color-iron-red)" strokeWidth="2" opacity="0.4" />
+      <circle cx="12" cy="12" r="2.6" stroke="currentColor" strokeWidth="2" />
+    </svg>
+  );
+}
 
-      {/* watcher eyes, ringed around the card, gaze lines converging on it */}
-      {[
-        { cx: 34, cy: 30 },
-        { cx: 34, cy: 98 },
-        { cx: 326, cy: 30 },
-      ].map((e, i) => (
-        <g key={i}>
-          <line
-            x1={e.cx}
-            y1={e.cy}
-            x2={180}
-            y2={73}
-            stroke="var(--color-iron-red)"
-            strokeWidth="1.5"
-            strokeDasharray="2 4"
-            opacity="0.45"
-          />
-          <ellipse cx={e.cx} cy={e.cy} rx="14" ry="9" stroke="var(--color-iron-red)" strokeWidth="2" />
-          <circle cx={e.cx} cy={e.cy} r="3.4" fill="var(--color-iron-red)" />
-        </g>
-      ))}
+function IconLock({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+      <rect x="5" y="11" width="14" height="10" rx="1.5" stroke="currentColor" strokeWidth="2" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
 
-      {/* an arrow front-running the order */}
+function IconCheck({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
       <path
-        d="M250 106 L300 106"
-        stroke="var(--color-iron-red)"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-      />
-      <path
-        d="M292 98 L302 106 L292 114"
-        stroke="var(--color-iron-red)"
-        strokeWidth="2.5"
+        d="M5 12.5 10 17l9-11"
+        stroke="currentColor"
+        strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
-        fill="none"
       />
     </svg>
   );
 }
 
-function SealedProofIllustration() {
+/* a blacked-out field — reads instantly as "redacted" */
+function Redaction({ width }: { width: string }) {
   return (
-    <svg
-      viewBox="0 0 360 128"
-      fill="none"
-      className="w-full h-auto"
-      aria-hidden="true"
+    <span
+      className="inline-block h-[0.82rem] rounded-[3px] align-middle"
+      style={{
+        width,
+        backgroundColor: "color-mix(in oklab, var(--color-ink-3) 52%, var(--color-vault-0))",
+        backgroundImage:
+          "repeating-linear-gradient(115deg, rgba(255,255,255,0.09) 0 2px, transparent 2px 6px)",
+      }}
+    />
+  );
+}
+
+function TicketRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-2 border-t border-steel-line/70 first:border-t-0">
+      <span className="mono-label text-[0.54rem] text-ink-3">{label}</span>
+      <span className="flex items-center">{children}</span>
+    </div>
+  );
+}
+
+function OrderTicket({ sealed }: { sealed: boolean }) {
+  const accent = sealed ? "var(--color-ice)" : "var(--color-iron-red)";
+  const value = "mono-data text-[0.82rem] text-ink";
+  return (
+    <div
+      className="rounded-lg border p-4 sm:p-5"
+      style={{
+        borderColor: `color-mix(in oklab, ${accent} 34%, var(--color-steel-line))`,
+        background: "linear-gradient(180deg, var(--color-vault-2), var(--color-vault-1))",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.045)",
+      }}
     >
-      {/* sealed order box */}
-      <rect
-        x="46"
-        y="42"
-        width="120"
-        height="62"
-        rx="3"
-        stroke="var(--color-ice)"
-        strokeWidth="2"
-        fill="color-mix(in oklab, var(--color-ice) 7%, transparent)"
-      />
-      <rect x="86" y="52" width="40" height="26" rx="2" stroke="var(--color-ice)" strokeWidth="2" />
-      <path
-        d="M94 52v-8a12 12 0 0 1 24 0v8"
-        stroke="var(--color-ice)"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-      <circle cx="106" cy="65" r="2.6" fill="var(--color-ice)" />
+      <div className="flex items-center justify-between mb-3">
+        <span className="mono-label text-[0.54rem] text-ink-3">Order ticket · OTC</span>
+        <span
+          className="h-1.5 w-1.5 rounded-full"
+          style={{
+            backgroundColor: accent,
+            boxShadow: `0 0 8px 1px color-mix(in oklab, ${accent} 70%, transparent)`,
+          }}
+        />
+      </div>
 
-      {/* dashed link, order to independent proof */}
-      <line
-        x1="166"
-        y1="73"
-        x2="244"
-        y2="73"
-        stroke="var(--color-ice)"
-        strokeWidth="1.5"
-        strokeDasharray="3 5"
-        opacity="0.55"
-      />
+      <TicketRow label="Side">
+        {sealed ? <Redaction width="3rem" /> : <span className={value}>SELL</span>}
+      </TicketRow>
+      <TicketRow label="Size">
+        {sealed ? <Redaction width="5.2rem" /> : <span className={value}>5,000 FXRP</span>}
+      </TicketRow>
+      <TicketRow label="Counterparty">
+        {sealed ? <Redaction width="4rem" /> : <span className={value}>open book</span>}
+      </TicketRow>
 
-      {/* separate proof badge with a check */}
-      <circle cx="284" cy="73" r="34" stroke="var(--color-ice)" strokeWidth="2" fill="color-mix(in oklab, var(--color-ice) 7%, transparent)" />
-      <path
-        d="M270 74l9 9 17-19"
-        stroke="var(--color-ice)"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
+      <div className="mt-3.5 pt-3.5 flex items-center justify-between border-t border-steel-line">
+        <span className="inline-flex items-center gap-1.5" style={{ color: accent }}>
+          {sealed ? <IconLock className="h-3.5 w-3.5" /> : <IconEye className="h-3.5 w-3.5" />}
+          <span className="mono-label text-[0.54rem]">
+            {sealed ? "Sealed in a TEE" : "Seen by the market"}
+          </span>
+        </span>
+        <span
+          className="mono-data text-[0.72rem] inline-flex items-center gap-1"
+          style={{ color: accent }}
+        >
+          {sealed ? (
+            <>
+              fair fill <IconCheck className="h-3 w-3" />
+            </>
+          ) : (
+            <>slips −1.8%&nbsp;▼</>
+          )}
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -167,8 +175,8 @@ export default function WithoutWith() {
         <div className="grid gap-6 lg:grid-cols-2">
           <div className="panel panel-hover p-8 sm:p-10">
             <p className="mono-label text-[0.68rem] text-iron-red mb-6">Without WhisperDesk</p>
-            <div className="mb-7 -mt-1">
-              <WatchedOrderIllustration />
+            <div className="mb-8">
+              <OrderTicket sealed={false} />
             </div>
             <ul>
               {WITHOUT_ROWS.map((row) => (
@@ -183,8 +191,8 @@ export default function WithoutWith() {
 
           <div className="panel panel-hover p-8 sm:p-10">
             <p className="mono-label text-[0.68rem] text-ice mb-6">With WhisperDesk</p>
-            <div className="mb-7 -mt-1">
-              <SealedProofIllustration />
+            <div className="mb-8">
+              <OrderTicket sealed={true} />
             </div>
             <ul>
               {WITH_ROWS.map((row) => (

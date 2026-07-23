@@ -177,7 +177,9 @@ const DEFAULT_STEPS: StepDef[] = [
   },
 ];
 
-const STEP_MS = 5200;
+const STEP_MS = 5200; // autoplay dwell per step
+const PILL_MS = 1300; // travel duration (mirrors --pill-ms in globals.css)
+const BALANCE_DELAY = 1080; // snap balances the moment the pill lands
 
 function usePrefersReducedMotion() {
   const [reduced, setReduced] = useState(false);
@@ -216,6 +218,20 @@ function IconX({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
       <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconChevron({ dir, className }: { dir: "left" | "right"; className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+      <path
+        d={dir === "left" ? "M15 6l-6 6 6 6" : "M9 6l6 6-6 6"}
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -267,26 +283,26 @@ function TokenPill({ token }: { token: "FXRP" | "XRP" }) {
 }
 
 /* ---------------------------------------------------------------------------
-   Travel pill — animates from one end of its rail to the other over ~900ms.
-   Remounted (via key upstream) whenever a new step activates it.
+   Travel pill — glides one end of its rail to the other on a single eased
+   curve (fade in → travel → fade out on arrival). Motion lives in CSS
+   (.pill-travel / .pill-travel-rev); this just remounts per step via `key`.
 --------------------------------------------------------------------------- */
 
+// glow colour keyed to the asset moving down the wire
+function pillGlow(token: Token) {
+  return token === "XRP" ? "#c9d2dc" : "var(--color-ice)";
+}
+
 function TravelPill({ token, reverse }: { token: Token; reverse?: boolean }) {
-  const [arrived, setArrived] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setArrived(true), 40);
-    return () => clearTimeout(t);
-  }, []);
-  const startLeft = reverse ? "left-[calc(100%-1.4rem)]" : "left-0";
-  const endLeft = reverse ? "left-0" : "left-[calc(100%-1.4rem)]";
+  const glow = pillGlow(token);
   return (
     <span
-      className={`absolute top-1/2 -translate-y-1/2 h-[1.4rem] w-[1.4rem] grid place-items-center rounded-full border transition-[left] duration-[900ms] ease-in-out z-10 ${
-        arrived ? endLeft : startLeft
+      className={`absolute top-1/2 h-[1.4rem] w-[1.4rem] grid place-items-center rounded-full border z-10 ${
+        reverse ? "pill-travel-rev" : "pill-travel"
       } ${tokenClass(token)}`}
       style={{
         background: tokenBg(token),
-        boxShadow: "0 0 14px 1px color-mix(in oklab, var(--color-ice) 40%, transparent)",
+        boxShadow: `0 0 16px 2px color-mix(in oklab, ${glow} 42%, transparent)`,
       }}
       aria-hidden="true"
     >
@@ -309,7 +325,19 @@ function Rail({ pill, dashed = false }: { pill: PillSpec; dashed?: boolean }) {
           : { background: "var(--color-steel-line-2)" }
       }
     >
-      {pill && <TravelPill key={`${pill.token}-${pill.reverse ?? ""}`} token={pill.token} reverse={pill.reverse} />}
+      {pill && (
+        <>
+          {/* current running down the wire, in sync with the pill */}
+          <span
+            className={`absolute inset-x-0 top-1/2 -translate-y-1/2 h-[2px] pointer-events-none ${
+              pill.reverse ? "rail-current-rev" : "rail-current"
+            }`}
+            style={{ "--rail-glow": pillGlow(pill.token) } as React.CSSProperties}
+            aria-hidden="true"
+          />
+          <TravelPill token={pill.token} reverse={pill.reverse} />
+        </>
+      )}
     </div>
   );
 }
@@ -423,22 +451,49 @@ export default function DvpFlow() {
   const [active, setActive] = useState(0);
   const [playing, setPlaying] = useState(true);
   const [showDefault, setShowDefault] = useState(false);
+  const [shown, setShown] = useState<Balances>(BALANCES_HAPPY[0]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stepCount = HAPPY_STEPS.length;
 
   useEffect(() => {
     if (!playing || reducedMotion) return;
     timerRef.current = setInterval(() => {
-      setActive((i) => (i + 1) % HAPPY_STEPS.length);
+      setActive((i) => (i + 1) % stepCount);
     }, STEP_MS);
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [playing, reducedMotion]);
+  }, [playing, reducedMotion, stepCount]);
+
+  // Balances lag the pill: hold the prior value while it travels, then snap to
+  // the new value the instant it lands — so the money visibly moves first.
+  useEffect(() => {
+    const bal = (showDefault ? BALANCES_DEFAULT : BALANCES_HAPPY)[active];
+    const st = (showDefault ? DEFAULT_STEPS : HAPPY_STEPS)[active];
+    const hasPill = !!(st.railA || st.railB || st.payment);
+    if (reducedMotion || !hasPill) {
+      setShown(bal);
+      return;
+    }
+    const t = setTimeout(() => setShown(bal), BALANCE_DELAY);
+    return () => clearTimeout(t);
+  }, [active, showDefault, reducedMotion]);
 
   const goTo = useCallback((i: number) => {
     setActive(i);
     setPlaying(false);
   }, []);
+
+  const goPrev = useCallback(() => {
+    setPlaying(false);
+    setActive((i) => Math.max(0, i - 1));
+  }, []);
+
+  const goNext = useCallback(() => {
+    setPlaying(false);
+    setActive((i) => Math.min(stepCount - 1, i + 1));
+  }, [stepCount]);
 
   const toggleDefault = useCallback(() => {
     setShowDefault((d) => !d);
@@ -447,7 +502,7 @@ export default function DvpFlow() {
   }, []);
 
   const steps = showDefault ? DEFAULT_STEPS : HAPPY_STEPS;
-  const balances = (showDefault ? BALANCES_DEFAULT : BALANCES_HAPPY)[active];
+  const balances = shown;
   const step = steps[active];
   const isSettled = !showDefault && active === HAPPY_STEPS.length - 1;
   const isRefunded = showDefault && active === DEFAULT_STEPS.length - 1;
@@ -520,7 +575,7 @@ export default function DvpFlow() {
                     <BalanceRow token="XRP" value={balances.you.xrp} />
                   </PartyCard>
 
-                  <Rail pill={step.railA} />
+                  <Rail key={`ra-${active}-${showDefault}`} pill={step.railA} />
 
                   <div className="relative shrink-0">
                     <ChipBadge state={step.chip} />
@@ -529,7 +584,7 @@ export default function DvpFlow() {
                     </PartyCard>
                   </div>
 
-                  <Rail pill={step.railB} />
+                  <Rail key={`rb-${active}-${showDefault}`} pill={step.railB} />
 
                   <PartyCard sub="Maker" label="Counterparty">
                     <BalanceRow token="XRP" value={balances.maker.xrp} />
@@ -540,7 +595,7 @@ export default function DvpFlow() {
                 {/* direct XRPL payment rail, bypassing the vault */}
                 <div className="mt-8 sm:mt-10 flex items-center gap-3 px-1">
                   <span className="mono-label text-[0.56rem] text-ink-3 shrink-0">You</span>
-                  <Rail pill={step.payment} dashed />
+                  <Rail key={`pay-${active}-${showDefault}`} pill={step.payment} dashed />
                   <span className="mono-label text-[0.56rem] text-ink-3 shrink-0 relative">
                     XRP Ledger — direct payment
                     {step.blockedMarker && (
@@ -606,8 +661,28 @@ export default function DvpFlow() {
               ))}
             </div>
 
-            {/* controls */}
-            <div className="mt-6 flex flex-wrap items-center gap-4">
+            {/* controls — step back / forward, play, and the counter */}
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={goPrev}
+                disabled={active === 0}
+                aria-label="Previous step"
+                className="mono-label text-[0.68rem] inline-flex items-center gap-1.5 pl-2.5 pr-3.5 py-2 border border-steel-line-2 text-ink-2 hover:text-ink hover:border-ice-deep/60 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
+              >
+                <IconChevron dir="left" className="h-3.5 w-3.5" />
+                Prev
+              </button>
+              <button
+                type="button"
+                onClick={goNext}
+                disabled={active === stepCount - 1}
+                aria-label="Next step"
+                className="mono-label text-[0.68rem] inline-flex items-center gap-1.5 pl-3.5 pr-2.5 py-2 border border-steel-line-2 text-ink-2 hover:text-ink hover:border-ice-deep/60 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
+              >
+                Next
+                <IconChevron dir="right" className="h-3.5 w-3.5" />
+              </button>
               <button
                 type="button"
                 onClick={() => setPlaying((p) => !p)}
@@ -615,6 +690,12 @@ export default function DvpFlow() {
               >
                 {playing ? "Pause" : "Play"}
               </button>
+              <span className="mono-label text-[0.6rem] text-ink-3 ml-1 tabular-nums">
+                {String(active + 1).padStart(2, "0")} / {String(stepCount).padStart(2, "0")}
+              </span>
+            </div>
+
+            <div className="mt-3">
               <button
                 type="button"
                 onClick={toggleDefault}
