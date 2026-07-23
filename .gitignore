@@ -19,3 +19,8 @@ CLAUDE.md
 # Derived/tooling artifacts — local only
 graphify-out/
 .obsidian/
+
+# UI dev artifacts
+.playwright-mcp/
+whisperdesk-*.jpeg
+flow*.jpeg
