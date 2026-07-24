@@ -40,14 +40,19 @@ interface IFlareContractRegistry {
 ///     shortening these windows does not risk failing the happy-path demo even if the live FDC
 ///     round-trip runs long; it only shortens how long an UNPAID match stays refundable-pending.
 ///
-/// `teeSigner` is set to the SAME key that broadcasts this script (`PRIVATE_KEY`) — a key we fully
-/// control end-to-end. Step 5's E2E does not depend on a live TEE enclave: `scripts/e2e/` signs
-/// every `MatchInstruction` locally with this exact key (WD_MATCH_V1 scheme, design.md §3.5).
+/// `teeSigner` defaults to the SAME key that broadcasts this script (`PRIVATE_KEY`) — a key we
+/// fully control end-to-end. Step 5's E2E does not depend on a live TEE enclave: `scripts/e2e/`
+/// signs every `MatchInstruction` locally with this exact key (WD_MATCH_V1 scheme, design.md
+/// §3.5). Set `TEE_SIGNER` to point the new escrow at a live enclave's address instead (e.g. the
+/// `TeeID`/`PublicKey` address read from the extension-tee proxy's `/info`, per the §3.11
+/// teeSigner-lifecycle runbook) — the enclave's identity key regenerates on every boot, so this
+/// only needs to be set to whatever address is currently live at deploy time.
 ///
 /// Run:
 ///   forge script script/DeployIntegration.s.sol --rpc-url coston2 --broadcast --slow
 /// Env:
-///   PRIVATE_KEY   deployer / teeSigner / relayer / FTSOv2-fee-payer (funded with C2FLR)
+///   PRIVATE_KEY   deployer / relayer / FTSOv2-fee-payer (funded with C2FLR); also default teeSigner
+///   TEE_SIGNER    optional — overrides teeSigner with a live enclave address instead of PRIVATE_KEY's
 contract DeployIntegration is Script {
     address internal constant REGISTRY = 0xaD67FE66660Fb8dFE9d6b1b4240d8650e30F6019;
 
@@ -65,6 +70,9 @@ contract DeployIntegration is Script {
     function run() external {
         uint256 pk = vm.envUint("PRIVATE_KEY");
         address dev = vm.addr(pk);
+        // Optional override so the new escrow's teeSigner can be set to a live enclave's address
+        // instead of the deployer key. Defaults to `dev` (current/original behavior) when unset.
+        address teeSigner = vm.envOr("TEE_SIGNER", dev);
 
         // Registry lookups are plain `view` reads (STATICCALL) — resolved BEFORE startBroadcast so
         // they never get recorded/sent as transactions, mirroring the fork tests' ordering.
@@ -81,7 +89,7 @@ contract DeployIntegration is Script {
         DvPEscrow escrow = new DvPEscrow(
             IERC20(address(fxrp)),
             IBondLedger(address(bond)),
-            dev, // teeSigner — deployer-controlled key; scripts/e2e/ signs with this same PRIVATE_KEY
+            teeSigner, // defaults to `dev` (deployer key); override via TEE_SIGNER for a live enclave
             IFtsoV2(ftsoV2),
             IFdcVerification(fdcVerification),
             bytes32("testXRP"),
@@ -97,7 +105,8 @@ contract DeployIntegration is Script {
 
         console.log("=== DeployIntegration (Step 5) ===");
         console.log("Network              Coston2 (chainId 114)");
-        console.log("Deployer/teeSigner  ", dev);
+        console.log("Deployer            ", dev);
+        console.log("teeSigner           ", teeSigner);
         console.log("MockFXRP            ", address(fxrp));
         console.log("BondLedger          ", address(bond));
         console.log("DvPEscrow           ", address(escrow));

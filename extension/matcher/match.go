@@ -196,6 +196,31 @@ func instructionToWire(mi MatchInstruction) *MatchWire {
 func Match(book *SealedBook, cfg Config, escrow common.Address, chainID uint64, teeKey *ecdsa.PrivateKey,
 	rfqID common.Hash, snap ChainSnapshot, now time.Time,
 ) (*MatchOutcome, error) {
+	return matchWithSignFunc(book, cfg, escrow, chainID, func(mi MatchInstruction) (*SignedMatch, error) {
+		return Sign(mi, chainID, teeKey)
+	}, rfqID, snap, now)
+}
+
+// MatchWithSigner runs RFQ_MATCH exactly like Match() above, but sources the WD_MATCH_V1 signature
+// from signFn (a SignerFunc, see instruction.go) instead of a local *ecdsa.PrivateKey — the seam
+// production callers (fcewire) use to sign via the tee-node sign port (POST /sign) rather than
+// holding the TEE identity key in-process. Provably byte-identical output to Match() for the same
+// underlying key (see SignerFunc's doc comment).
+func MatchWithSigner(book *SealedBook, cfg Config, escrow common.Address, chainID uint64, signFn SignerFunc,
+	rfqID common.Hash, snap ChainSnapshot, now time.Time,
+) (*MatchOutcome, error) {
+	return matchWithSignFunc(book, cfg, escrow, chainID, func(mi MatchInstruction) (*SignedMatch, error) {
+		return SignWithFunc(mi, chainID, signFn)
+	}, rfqID, snap, now)
+}
+
+// matchWithSignFunc is the shared body of Match()/MatchWithSigner(): guards, snapshots the book
+// under lock, runs the pure matchCore, and on a MATCHED outcome builds + signs the MatchInstruction
+// via the injected signer closure. Idempotent: a replayed call for an already-matched rfqId returns
+// the cached outcome (status "success" either way — mirrors ActionResult status 1).
+func matchWithSignFunc(book *SealedBook, cfg Config, escrow common.Address, chainID uint64,
+	sign func(MatchInstruction) (*SignedMatch, error), rfqID common.Hash, snap ChainSnapshot, now time.Time,
+) (*MatchOutcome, error) {
 	if cached, ok := book.CachedOutcome(rfqID); ok {
 		return cached, nil
 	}
@@ -215,7 +240,7 @@ func Match(book *SealedBook, cfg Config, escrow common.Address, chainID uint64, 
 
 	if outcome.Outcome == "MATCHED" {
 		mi := wireToInstruction(outcome.Match)
-		signed, err := Sign(mi, chainID, teeKey)
+		signed, err := sign(mi)
 		if err != nil {
 			return nil, fmt.Errorf("matcher: Match: sign: %w", err)
 		}

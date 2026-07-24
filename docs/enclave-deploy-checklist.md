@@ -1,0 +1,215 @@
+# Enclave deploy checklist — `/direct` enable + port fix + escrow retarget
+
+For the human operator running this on the VPS (`/root/whisperdesk/fce-extension-scaffold`, live at
+`https://fce.endpx.cloud`). Prepared locally only — nothing here has touched the VPS or been
+committed. Read the whole file before running anything; step 0 gates everything else.
+
+Local diffs this checklist assumes are already synced to the VPS:
+- `fce-extension-scaffold/config/proxy/extension_proxy.coston2.docker.toml.example` — added `[direct]`
+- `fce-extension-scaffold/docker-compose.yaml` — `DIRECT_API_KEY` passthrough on `ext-proxy`,
+  `EXT_PROXY_INTERNAL_BIND` default flipped to `127.0.0.1:6673`, `WD_*` passthrough on `extension-tee`
+- `Flare/contracts/script/DeployIntegration.s.sol` — optional `TEE_SIGNER` env override
+
+## 0. Pre-flight — verify before touching anything
+
+**0.1 — codeHash / re-registration verdict (read this before deciding to restart `extension-tee`).**
+In `MODE=1` (simulated, what this stack runs — see `.claude/context/deployments.md`), the `/info`
+`codeHash` is **not** derived from the built image at all:
+- `tee-node/internal/attestation/attestation.go:46` sets `cHash := settings.TestCodeHash` unconditionally;
+  the real-attestation derivation block that would read the codeHash out of the actual binary/image
+  only runs `if settings.Mode == 0` (line 49) — skipped entirely when `MODE=1`.
+- `tee-node/internal/attestation/attestation_token.go:34-36` — `GetGoogleAttestationToken` short-circuits
+  to the `MagicPass` sentinel whenever `settings.Mode != 0`, so no real attestation call happens either.
+- `tee-node/internal/settings/settings.go:112` — `TestCodeHash = common.HexToHash("194844cf417dde867073e5ab7199fa4d21fd82b5dbe2bdea8b3d7fc18d10fdc2")`,
+  a hardcoded Go constant, matching the currently-registered `codeHash 0x194844…fdc2` in
+  `.claude/context/deployments.md`.
+
+  **Verdict: rebuilding the `extension-tee` image does NOT change the `/info` codeHash in simulated
+  mode**, as long as `MODE` stays `1` and nobody edits `settings.go`'s `TestCodeHash` literal. `docker
+  compose build extension-tee` is safe from a codeHash standpoint.
+
+  **But there is a bigger, separate landmine**: `tee-node/internal/node/node.go:83-89` —
+  `Initialize()` calls `crypto.GenerateKey()` to mint a **fresh in-memory ECDSA keypair on every
+  process start**, with no persistence (no volume, no seed). This is the node's `PublicKey`/`TeeID`
+  (part of `MachineData`, `attestation.go:67-74`), and it is exactly what `DvPEscrow.teeSigner` is
+  checked against. Confirmed by `docs/design.md` §3.11: *"TEE machines are stateless; the identity
+  key regenerates on every boot (confirmed by Flare)."* **Any restart of the `extension-tee`
+  container — rebuild or not — rotates the live TEE signer address** (`0x1832e33F99cF5628f6Dc7Ae34e6011995BFdE4BD`
+  today) and invalidates it against every escrow that has that address as `teeSigner`, until
+  `register-tee -command rRap` + `setTeeSigner(newAddr)` are re-run (design.md §3.11 runbook,
+  `scripts/wd-rebind.sh`).
+
+  **Consequence for this checklist**: the `[direct]`/port-binding/`DIRECT_API_KEY` changes below are
+  all on **`ext-proxy` only** — they do not require touching `extension-tee`. Restarting `ext-proxy`
+  alone does not rotate the enclave's key (that key lives in the `extension-tee` process, not the
+  proxy). **Keep `extension-tee` running and do not restart/rebuild it in this pass** unless you
+  explicitly intend to run the full re-registration + `setTeeSigner` rebind afterward (§5 below) —
+  the `WD_*` vars being added are not yet read by any code (`grep` across the scaffold repo finds zero
+  consumers), so there is no functional reason to restart `extension-tee` just to pick them up today.
+
+**0.2 — directory layout / build context.** `docker-compose.yaml`'s `extension-tee.build` uses
+`context: ../..` + `dockerfile: extension-examples/extension-scaffold/Dockerfile`, which assumes a
+nested layout (`tee/{tee-node/, extension-examples/extension-scaffold/}`). `docs/fce-runbook.md`
+already documents that the flat sibling layout actually used here (`fce/{fce-extension-scaffold/,
+tee-node/, tee-proxy/}`) needs `context: ..` + `dockerfile: fce-extension-scaffold/Dockerfile`
+instead, and flags this as **identified but not yet applied**. The tracked `go.mod` on the VPS may or
+may not already carry the matching `replace .../tee-node => ../tee-node` fix (this local checkout
+does — it's an uncommitted local-only edit here; do **not** blindly `git apply`/overwrite the VPS's
+`go.mod` with this local one without first diffing it against what's live there).
+
+Before running `docker compose build extension-tee` on the VPS:
+```bash
+cd /root/whisperdesk/fce-extension-scaffold
+docker compose -f docker-compose.yaml -f docker-compose.coston2.yaml config | grep -A4 'dockerfile\|context:'
+git diff go.mod   # confirm the replace path matches the VPS's actual on-disk sibling layout
+```
+If the resolved `context`/`dockerfile` don't point at real files (`ls <context>/tee-node`, `ls
+<context>/extension-examples/extension-scaffold` or the flat equivalent), **fix the compose build
+section and go.mod replace path first** — do not attempt the build. This is orthogonal to the
+`[direct]`/port changes below (different section of the file) and does not block them.
+
+**0.3 — this pass never restarts `extension-tee`.** Given 0.1, the plan below only restarts
+`ext-proxy`. `extension-tee`'s new `WD_*` env passthrough is inert (no code reads it yet) and stays
+staged in `.env`/compose for a deliberate future rebind (§5), not exercised here.
+
+## 1. Sync the diffs to the VPS
+
+From this local checkout, either:
+```bash
+# Option A: rsync the touched files directly (no git needed on the VPS side for these three)
+rsync -av "D:/Belajar/Hackacton/fce/fce-extension-scaffold/config/proxy/extension_proxy.coston2.docker.toml.example" \
+  vps:/root/whisperdesk/fce-extension-scaffold/config/proxy/
+rsync -av "D:/Belajar/Hackacton/fce/fce-extension-scaffold/docker-compose.yaml" \
+  vps:/root/whisperdesk/fce-extension-scaffold/docker-compose.yaml
+
+# Option B: git diff + apply (safer — shows exactly what changes, lets you review before applying)
+cd "D:/Belajar/Hackacton/fce/fce-extension-scaffold"
+git diff -- docker-compose.yaml config/proxy/extension_proxy.coston2.docker.toml.example > /tmp/direct-enable.diff
+scp /tmp/direct-enable.diff vps:/root/whisperdesk/fce-extension-scaffold/
+ssh vps 'cd /root/whisperdesk/fce-extension-scaffold && git apply --check direct-enable.diff && git apply direct-enable.diff'
+```
+`--check` first because the live `docker-compose.yaml` on the VPS may have already diverged from
+what git tracks (see 0.2) — if `git apply` fails, merge the hunks by hand instead of forcing it.
+
+**The actual live `config/proxy/extension_proxy.coston2.docker.toml` (not the `.example`) is
+gitignored** — it holds the real Indexer DB credentials and was never in this checkout (confirmed:
+only the `.example` exists locally). You cannot diff/rsync it from here. **Manually add the same
+`[direct]` block** (copied below) to the end of the live file on the VPS:
+```toml
+[direct]
+enable = true
+api_key_variable = "DIRECT_API_KEY"
+api_key_optional = false
+max_body_size = 65536
+```
+Field names verified against `tee-proxy/pkg/config/config.go`'s `Direct` struct
+(`enable`/`api_key`/`api_key_variable`/`api_key_optional`/`max_body_size` — config.go:196-202), not
+just `config.example.toml`.
+
+## 2. Generate `DIRECT_API_KEY`
+
+**Do not** ask an assistant to generate or store this — generate and hold it yourself:
+```bash
+openssl rand -hex 32
+```
+Put it in the VPS's `.env` (next to `PROXY_PRIVATE_KEY`) as `DIRECT_API_KEY=<generated value>`. This
+is a secret — never echo it into shell history you'll paste elsewhere, never commit it, never send it
+to a log.
+
+## 3. Bring up `ext-proxy` only
+
+```bash
+cd /root/whisperdesk/fce-extension-scaffold
+docker compose -f docker-compose.yaml -f docker-compose.coston2.yaml config >/dev/null   # sanity-check merge
+curl -sf https://fce.endpx.cloud/info | tee /tmp/info-before.json   # capture BEFORE state
+docker compose -f docker-compose.yaml -f docker-compose.coston2.yaml up -d ext-proxy
+docker compose -f docker-compose.yaml -f docker-compose.coston2.yaml logs -f ext-proxy   # watch for panics / config errors
+```
+Confirm `extension-tee` did not restart (`docker compose ps` — its `Up <duration>` should not have
+reset) and is still reachable through the bounced proxy:
+```bash
+curl -sf https://fce.endpx.cloud/info | tee /tmp/info-after.json
+diff /tmp/info-before.json /tmp/info-after.json   # expect NO diff — same codeHash, same PublicKey/TeeID
+```
+If `PublicKey`/`TeeID` differ from before, `extension-tee` restarted (intentionally or as a side
+effect of `depends_on`) — stop and go to §5 (full rebind) before deploying anything against it.
+
+## 4. Verify the port fix and `/direct`
+
+```bash
+# 6673 must now be loopback-only — confirm from the VPS itself and from outside:
+ss -tlnp | grep 6673                     # expect 127.0.0.1:6673, not 0.0.0.0:6673
+curl -m3 http://<vps-public-ip>:6673/info   # expect connection refused/timeout from off-box
+
+# /direct without a key → 401, per tee-proxy/internal/server/external.go verifyAPIKey (line 184-192)
+curl -si -X POST https://fce.endpx.cloud/direct -d '{}'        # expect HTTP/1.1 401
+curl -si -X POST https://fce.endpx.cloud/direct \
+  -H "X-API-Key: <the DIRECT_API_KEY you generated>" -d '{}'   # expect 400 (invalid body), NOT 401 —
+                                                                 # proves the key check passed and it's
+                                                                 # now failing on payload shape instead
+```
+
+## 5. Escrow deploy + `TEE_SIGNER` wiring
+
+Order matters — deploy against the **currently live** enclave address, read fresh, not the value
+hardcoded in `deployments.md` (it hasn't drifted per §3's diff check, but read it again to be sure):
+```bash
+curl -sf https://fce.endpx.cloud/info | jq -r '.machineData.publicKey'   # or however /info nests it —
+                                                                            # cross-check against TeeID/address
+```
+Then, from the main repo:
+```bash
+cd contracts
+export PRIVATE_KEY=<funded deployer key>
+export TEE_SIGNER=<address read from /info above>   # NEW — omit to keep old default-to-deployer behavior
+forge script script/DeployIntegration.s.sol --rpc-url coston2 --broadcast --slow
+```
+Record the new `DvPEscrow`/`BondLedger` addresses in `.claude/context/deployments.md` (submission
+item). Then wire them into the VPS extension env (staged only — see §0.3, no restart yet):
+```bash
+# on the VPS, in whatever .env extension-tee's env_file (config/extension.env) reads:
+WD_ESCROW_ADDR=<new DvPEscrow address>
+WD_BOND_ADDR=<new BondLedger address>
+WD_MIN_BLOCK_FXRP_RAW=1000000        # 1 FXRP, 6-dec raw — matches MIN_BLOCK_FXRP in the script
+WD_BAND_BPS=<pick a value — design.md §3.6/§3.12 band check, currently ±1% = 100 bps>
+WD_QUOTE_TTL_SEC=<pick a value — design.md §3.6 instructionExpiresAt is +300s today>
+# Demo-only: enables the /direct RFQ_SUBMIT bypass (extension/fcewire/PROTOCOL.md "Demo ingress
+# (WD_ALLOW_DIRECT_RFQ)") for the live demo loop while WhisperDeskInstructionSender is still a stub.
+# Exact string "true" enables it; leave unset/anything else once the real onchain sender ships.
+WD_ALLOW_DIRECT_RFQ=<"true" to enable, unset otherwise>
+```
+
+**If/when you do decide to restart `extension-tee`** to make it start consuming `WD_*` (once that
+consumer code exists) or to pick up the `docker-compose.yaml`/proxy-config sync in full, follow the
+full rebind runbook — restarting rotates the enclave's key (§0.1), so the escrow's `teeSigner` goes
+stale the moment the container comes back up, **even if you just set `TEE_SIGNER` to the right value
+five minutes ago**:
+```bash
+docker compose -f docker-compose.yaml -f docker-compose.coston2.yaml up -d --build extension-tee
+# then, per docs/design.md §3.11 / scripts/wd-rebind.sh:
+#   register-tee -command rRap   (capital R = fresh challenge; lowercase r → ChallengeExpired)
+#   curl -sf https://fce.endpx.cloud/info   # read the NEW teeID/publicKey
+#   cast send <escrow-owner-key> <ESCROW_ADDR> "setTeeSigner(address)" <newTeeId> --rpc-url coston2
+```
+Do this rebind in the **same maintenance window** as the restart — an escrow whose `teeSigner` no
+longer matches the running enclave will fail-closed on every `lock()` (design.md §3.4/§3.12 #1) until
+rebound.
+
+## 6. Rollback
+
+```bash
+cd /root/whisperdesk/fce-extension-scaffold
+docker compose -f docker-compose.yaml -f docker-compose.coston2.yaml down ext-proxy
+git diff docker-compose.yaml config/proxy/extension_proxy.coston2.docker.toml.example   # review
+git checkout -- docker-compose.yaml   # or manually revert the hunks if git apply diverged (0.2)
+# revert the live (gitignored) coston2.docker.toml's [direct] block by hand (delete the block added in §1)
+docker compose -f docker-compose.yaml -f docker-compose.coston2.yaml up -d ext-proxy
+# previous image tag, if extension-tee was ever rebuilt in this session:
+docker compose -f docker-compose.yaml -f docker-compose.coston2.yaml images extension-tee
+docker tag <previous-image-id> local/extension-tee:rollback
+# then point docker-compose at the tag or `docker run` it directly to restore the exact prior binary
+```
+Nothing in §3-4 (the ext-proxy-only path) touches the escrow or the enclave's registered identity, so
+rollback there is a plain config/container revert. The escrow deployed in §5 is a **new, separate**
+contract — rolling it back just means going back to pointing the demo at the old
+`0x5f32783D629E2acBb83f16628ad76D02A26CFB9B` (or whichever was live before), no on-chain undo needed.

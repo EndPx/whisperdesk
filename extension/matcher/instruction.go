@@ -202,6 +202,87 @@ func Sign(mi MatchInstruction, chainID uint64, privKey *ecdsa.PrivateKey) (*Sign
 	}, nil
 }
 
+// SignerFunc abstracts "produce a raw [R||S||V] signature (V in {0,1}) over the WD_MATCH_V1
+// pre-image message" — the same contract tee-node's utils.Sign has, and the same contract the real
+// sign port satisfies end-to-end (see below). message is the 96-byte
+// abi.encode(WD_MATCH_TAG, chainId, dataHash) pre-image, NOT its hash.
+//
+// Implementations MUST keccak256(message) themselves before the EIP-191 personal-sign wrap — this
+// is exactly what tee-node's POST /sign handler does server-side (msgHash :=
+// crypto.Keccak256(signRequest.Message); node.Sign(msgHash), which calls
+// utils.Sign(msgHash, privKey) = crypto.Sign(accounts.TextHash(msgHash), privKey)):
+// so posting the raw 96-byte message to the real sign port and letting IT hash internally
+// produces a byte-identical digest to this package's local Sign()
+// (payloadHash = csigning.Payload.Hash() = keccak256(message) is exactly what /sign's
+// msgHash ends up being). See extension/fcewire/PROTOCOL.md "Sign-port digest finding" for the
+// full derivation and extension/fcewire/signclient.go for the network implementation.
+type SignerFunc func(message []byte) ([]byte, error)
+
+// SignWithFunc builds the WD_MATCH_V1 signature for mi exactly like Sign() below, but sources the
+// raw signature bytes from signFn instead of a local private key — the seam that lets fcewire (the
+// real enclave handler) sign via the tee-node sign port (POST /sign) while extension/matcher/*_test.go
+// and the vectors/golden-vector tests keep using a local *ecdsa.PrivateKey via Sign(). The two paths
+// are provably byte-identical (see SignerFunc's doc comment and the "Sign-port digest finding" in
+// extension/fcewire/PROTOCOL.md), so this function's output for the same key is byte-for-byte
+// identical to Sign()'s.
+func SignWithFunc(mi MatchInstruction, chainID uint64, signFn SignerFunc) (*SignedMatch, error) {
+	abiEncoded, err := mi.ABIEncode()
+	if err != nil {
+		return nil, fmt.Errorf("matcher: SignWithFunc: ABIEncode: %w", err)
+	}
+	dataHash := DataHash(abiEncoded)
+
+	message := wdMatchMessage(dataHash, chainID)
+
+	sig, err := signFn(message)
+	if err != nil {
+		return nil, fmt.Errorf("matcher: SignWithFunc: sign: %w", err)
+	}
+	if len(sig) != 65 {
+		return nil, fmt.Errorf("matcher: SignWithFunc: expected 65-byte signature, got %d", len(sig))
+	}
+	// Normalize V: sign port / utils.Sign return V in {0,1}; onchain ecrecover requires {27,28}.
+	sig = append([]byte(nil), sig...) // defensive copy — do not mutate callee's buffer
+	if sig[64] < 27 {
+		sig[64] += 27
+	}
+
+	digest := EthSignedDigest(dataHash, chainID)
+
+	recoveredPub, err := crypto.SigToPub(digest[:], normalizeForRecover(sig))
+	if err != nil {
+		return nil, fmt.Errorf("matcher: SignWithFunc: recover pubkey: %w", err)
+	}
+	signer := crypto.PubkeyToAddress(*recoveredPub)
+
+	return &SignedMatch{
+		Instruction:  mi,
+		AbiEncoded:   abiEncoded,
+		DataHash:     dataHash,
+		EthSignedDig: digest,
+		Signature:    sig,
+		Signer:       signer,
+	}, nil
+}
+
+// wdMatchMessage builds the 96-byte WD_MATCH_V1 pre-image abi.encode(WD_MATCH_TAG, chainId,
+// dataHash) — the exact bytes design.md §3.5 specifies POSTing to the sign port. Mirrors
+// EthSignedDigest's `encoded` construction exactly (kept as a separate, independent literal rather
+// than a shared helper so a future edit to one cannot silently change the other without both
+// call sites being touched — the byte-for-byte equivalence between this and
+// csigning.NewPayload(...).Hash()'s internal encoding is what TestSigningSchemeMatchesMatchInstructionLib
+// / TestGoldenVectors_MatchInstruction already prove).
+func wdMatchMessage(dataHash common.Hash, chainID uint64) []byte {
+	tag := WDMatchTag()
+	chainIDWord := common.LeftPadBytes(new(big.Int).SetUint64(chainID).Bytes(), 32)
+
+	encoded := make([]byte, 0, 96)
+	encoded = append(encoded, tag[:]...)
+	encoded = append(encoded, chainIDWord...)
+	encoded = append(encoded, dataHash[:]...)
+	return encoded
+}
+
 // normalizeForRecover converts a 65-byte [R||S||V] signature with V in {27,28} (the on-chain /
 // lock() wire format) back to the {0,1} form crypto.SigToPub/crypto.Ecrecover expect.
 func normalizeForRecover(sig []byte) []byte {

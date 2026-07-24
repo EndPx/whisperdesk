@@ -196,6 +196,27 @@ func (b *SealedBook) markMatched(rfqID common.Hash, outcome *MatchOutcome) {
 	}
 }
 
+// Participants returns rfqID's taker and the addresses of every maker currently resting a quote
+// against it — exactly what a caller needs to build a ChainSnapshot (taker's armed/committed
+// balance, each maker's free bond) before calling Match/MatchWithSigner. Read-only, defensive copy;
+// safe to call outside book.mu (fcewire's handler.go uses this to snapshot chain state ahead of
+// RFQ_MATCH, never inside the 2-second /action handler path itself — see docs/design.md §4.1/§4.4).
+func (b *SealedBook) Participants(rfqID common.Hash) (taker common.Address, makers []common.Address, err error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	rfq, ok := b.rfqs[rfqID]
+	if !ok {
+		return common.Address{}, nil, ErrRfqUnknown
+	}
+	byMaker := b.quotes[rfqID]
+	makers = make([]common.Address, 0, len(byMaker))
+	for m := range byMaker {
+		makers = append(makers, m)
+	}
+	return rfq.Taker, makers, nil
+}
+
 // CachedOutcome returns a previously computed match outcome for rfqID, if any (idempotence check).
 func (b *SealedBook) CachedOutcome(rfqID common.Hash) (*MatchOutcome, bool) {
 	b.mu.Lock()

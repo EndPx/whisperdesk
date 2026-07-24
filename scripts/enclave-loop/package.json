@@ -1,0 +1,13 @@
+{
+  "name": "whisperdesk-enclave-loop",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Node runner for the client half of WhisperDesk's enclave loop: takes the `wd-client loop` JSON, funds taker deposit + maker bond, calls DvPEscrow.lock() with the enclave-signed MatchInstruction (no local signing), pays the XRPL leg, requests an FDC proof, and calls release(). Reuses scripts/e2e/lib/* and scripts/e2e/config.mjs directly (relative imports, not a package dependency) — this package.json only needs its OWN direct imports (ethers) resolvable; scripts/e2e's own node_modules resolves its internal imports (dotenv, xrpl) independently since Node resolves each module's bare specifiers relative to that module's own directory.",
+  "scripts": {
+    "run": "node run.mjs"
+  },
+  "dependencies": {
+    "ethers": "^6.13.4"
+  }
+}
