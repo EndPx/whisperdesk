@@ -133,11 +133,12 @@ export default function DemoConsole() {
   const [makerFxrp, setMakerFxrp] = useState(0);
   const [vaultFxrp, setVaultFxrp] = useState(0);
 
-  const [mode, setMode] = useState<"one-click" | "wallet">("one-click");
+  const [mode, setMode] = useState<"one-click" | "wallet">("wallet");
   const [walletBusy, setWalletBusy] = useState(false);
 
   const [runPath, setRunPath] = useState<"happy" | "default" | null>(null);
   const [busy, setBusy] = useState(false);
+  const [rateLimited, setRateLimited] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [log, setLog] = useState<LogLine[]>([]);
   const [countdown, setCountdown] = useState<Countdown | null>(null);
@@ -302,6 +303,7 @@ export default function DemoConsole() {
     setRunPath("happy");
     setError(null);
     setBusy(false);
+    setRateLimited(false);
     addLog("Starting live settlement — happy path", { tone: "muted" });
     try {
       setRailAPill({ token: "lock" });
@@ -315,10 +317,16 @@ export default function DemoConsole() {
         error?: string;
         busy?: boolean;
         enabled?: boolean;
+        retryAfterSeconds?: number;
       }>("/api/demo/lock", { path: "happy" });
 
       if (lockRes.status === 409) {
         setBusy(true);
+        clearPills();
+        return;
+      }
+      if (lockRes.status === 429) {
+        setRateLimited(true);
         clearPills();
         return;
       }
@@ -395,6 +403,7 @@ export default function DemoConsole() {
     setRunPath("default");
     setError(null);
     setBusy(false);
+    setRateLimited(false);
     addLog("Starting live settlement — default path (no payment)", { tone: "muted" });
     try {
       setRailAPill({ token: "lock" });
@@ -408,10 +417,16 @@ export default function DemoConsole() {
         error?: string;
         busy?: boolean;
         enabled?: boolean;
+        retryAfterSeconds?: number;
       }>("/api/demo/lock", { path: "default" });
 
       if (lockRes.status === 409) {
         setBusy(true);
+        clearPills();
+        return;
+      }
+      if (lockRes.status === 429) {
+        setRateLimited(true);
         clearPills();
         return;
       }
@@ -552,9 +567,19 @@ npm run happy-path`}
         </button>
       </div>
 
+      <p className="mono-label text-[0.56rem] text-ink-3">
+        Runs on the desk&apos;s testnet keys — limited to a few runs a day.
+      </p>
+
       {busy && (
         <p className="mono-label text-[0.66rem] text-iron-red">
           Another run is in progress — try again in a few minutes.
+        </p>
+      )}
+      {rateLimited && (
+        <p className="mono-label text-[0.66rem] text-iron-red">
+          The shared one-click demo has hit its daily limit. Use &quot;Be the taker&quot; to run it with
+          your own wallet, or check the receipts below.
         </p>
       )}
       {error && <p className="mono-label text-[0.66rem] text-iron-red">{error}</p>}
@@ -618,7 +643,7 @@ npm run happy-path`}
               : "border-steel-line-2 text-ink-2 hover:text-ink hover:border-ice-deep/60"
           }`}
         >
-          One-click
+          One-click (desk wallet)
         </button>
         <button
           type="button"
@@ -631,7 +656,7 @@ npm run happy-path`}
               : "border-steel-line-2 text-ink-2 hover:text-ink hover:border-ice-deep/60"
           }`}
         >
-          Be the taker
+          Be the taker (your wallet)
         </button>
       </div>
 

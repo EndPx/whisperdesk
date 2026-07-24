@@ -111,7 +111,7 @@ ice-cyan only on on-chain steps; each step shows a mono data readout. Zones colo
 - Worst case — *Bounded, not catastrophic.* A fully-compromised enclave can at most fill at the edge
   of the ±1% band — a quantified 1% loss, never theft. (vs "the TEE holds your keys.")
 
-**Footer**: `Flare Summer Signal · Bounty 2 (Confidential Compute) + Bounty 1 (FXRP) · live on Coston2`
+**Footer**: `Flare Summer Signal · Bounty 2 (Confidential Compute) · live on Coston2`
 
 ---
 

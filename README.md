@@ -3,8 +3,25 @@
 Private OTC desk for institutional XRP↔FXRP block trades. Sealed RFQs are matched inside a Flare
 Confidential Compute (FCE) enclave — side, size, and counterparty never leave it — and settlement
 is delivery-versus-payment (DvP) on Coston2: FXRP is released only against an FDC-proven XRPL
-payment. Built for **Flare Summer Signal** — Bounty 2 (Confidential Compute, primary) + Bounty 1
-(FXRP, dual).
+payment. Built for **Flare Summer Signal** — Bounty 2 (Confidential Compute).
+
+**▶ Try it: https://api.endpx.cloud** — the live demo runs a real DvP settlement on Coston2 + XRPL
+Testnet in about 4 minutes. Two modes: *Be the taker* (your own MetaMask, XRP lands on an XRPL
+address you control) or *One-click* (the desk's testnet keys; rate-limited). Live enclave:
+https://fce.endpx.cloud/info
+
+## What is and isn't real here
+
+This is a hackathon prototype, and these are its scope boundaries, not apologies:
+
+- **FXRP is a MockFXRP test token** (mintable, unbacked), not FAssets-minted FXRP. The DvP/settlement
+  machinery around it — escrow, FDC proof check, price band, bond slashing — is real; the asset is a
+  stand-in.
+- **The enclave runs in simulated-TEE mode** (attestation `magic_pass`, `SIMULATED_TEE=true`). Its
+  identity key regenerates on every restart by design — there is no persistent enclave identity yet.
+- **The demo RFQ ingress is `POST /direct`**, behind an API key with `WD_ALLOW_DIRECT_RFQ=true`, so the
+  taker identity in the envelope is self-attested. The production ingress,
+  `WhisperDeskInstructionSender.submitRfq` (binds `msg.sender` onchain), is still a stub.
 
 ## What it does
 
@@ -179,3 +196,14 @@ Everything in this repo — contracts, matcher, enclave wiring, E2E runners, UI 
 Flare Summer Signal; commit history is the evidence trail. All addresses and transactions above
 are **Coston2 and XRPL Testnet only**. This is a hackathon prototype: not audited, not production
 custody.
+
+## Roadmap
+
+What it would take to make this real, in order:
+
+1. Onchain `submitRfq` ingress — `WhisperDeskInstructionSender.submitRfq` binds `msg.sender`, removing the self-attested taker in `POST /direct`.
+2. Real FAssets FXRP — replace MockFXRP with an actual FAssets-minted FXRP position.
+3. Persistent TEE identity + real attestation — replace `magic_pass` with genuine remote attestation and a key that survives restarts.
+4. Maker onboarding — let more than one maker register into the sealed book, not just the demo pair.
+5. Multi-RFQ book — support concurrent open RFQs and matches, not one trade at a time.
+6. Mainnet/Songbird deploy — move off Coston2 once the above are stable.

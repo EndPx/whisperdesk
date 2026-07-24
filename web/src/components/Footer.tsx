@@ -11,7 +11,7 @@ export default function Footer() {
       <div className="mx-auto max-w-[1120px] px-6 sm:px-8 flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
         <Logo />
         <p className="mono-label text-[0.66rem] text-ink-3">
-          Flare Summer Signal · Bounty 2 (Confidential Compute) + Bounty 1 (FXRP) · live on Coston2
+          Flare Summer Signal · Bounty 2 (Confidential Compute) · live on Coston2
         </p>
         <nav className="flex items-center gap-6">
           {LINKS.map((link) => (

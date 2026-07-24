@@ -219,3 +219,35 @@ Nothing in §3-4 (the ext-proxy-only path) touches the escrow or the enclave's r
 rollback there is a plain config/container revert. The escrow deployed in §5 is a **new, separate**
 contract — rolling it back just means going back to pointing the demo at the old
 `0x5f32783D629E2acBb83f16628ad76D02A26CFB9B` (or whichever was live before), no on-chain undo needed.
+
+## Monitoring
+
+Because of §0.1 (the enclave's identity key regenerates in memory on every `extension-tee` restart,
+with no persistence), a silent VPS reboot between now and judging rotates the live TEE signer address
+without any visible symptom — `/info` still returns 200, the site still loads, but every `lock()` with
+an enclave signature reverts (`DvPEscrow.teeSigner` no longer matches). `scripts/enclave-loop/healthcheck.mjs`
+catches this by comparing the enclave's `/info`-derived address against `escrow.teeSigner()` on-chain.
+
+**Install this on the VPS** (not done by this checklist — a human runs it), every 15 minutes:
+
+```cron
+*/15 * * * * cd /root/whisperdesk/enclave-loop && /usr/bin/node healthcheck.mjs >> /var/log/whisperdesk-healthcheck.log 2>&1 || echo "WhisperDesk healthcheck exit=$? at $(date -u)" >> /var/log/whisperdesk-healthcheck-alerts.log
+```
+
+Adjust the `cd` path to wherever `scripts/enclave-loop/` lives on the VPS, and point `node` at the
+right binary if it's not on cron's default `PATH`. `healthcheck.mjs` needs no flags to run the real
+check — it defaults `EXT_PROXY_URL`/`ESCROW_ADDRESS`/`COSTON2_RPC` to the live judge-facing values,
+override via env if you're pointing it at a different escrow.
+
+**Exit codes** (see the header comment in `healthcheck.mjs` for the authoritative version):
+
+| Exit | Meaning | Action |
+|---|---|---|
+| `0` | OK — enclave `/info`-derived address matches `escrow.teeSigner()` | none |
+| `1` | DRIFT — both reachable, addresses don't match (key rotated, escrow stale) | run §5's `setTeeSigner` rebind now, using the NEW address the script prints |
+| `2` | DOWN — `/info` unreachable, non-200, malformed, or the RPC/escrow read failed | enclave or RPC is broken — check `docker compose ps`/logs on the VPS before assuming a key rotation |
+| `3` | (only via `--selftest`) offline derivation math itself is broken | should never fire from the cron line above; means `ethers` or the script changed, not a deployment issue |
+
+Exit `1` is the one that matters most before judging: it means the demo will fail on the very first
+`lock()` a judge tries, even though the site looks fully up. Treat any `1` in the alert log as
+same-day, not "next time someone's on the VPS."
