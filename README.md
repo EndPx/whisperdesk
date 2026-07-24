@@ -46,10 +46,38 @@ not hidden. See `docs/fce-runbook.md`.
 | `refund()` — taker got principal + 1% slashed bond after no payment | https://coston2-explorer.flare.network/tx/0x1605a2ced9852f9caefebf6339cac3d294758f9d5e30c968208d2a4c0cc1feed |
 
 Both flows ran end-to-end against real Coston2 + real XRPL Testnet + the real FDC verifier/DA
-layer. The `MatchInstruction` for these runs was signed by the integration instance's registered
+layer. The `MatchInstruction` for these two runs was signed by the integration instance's registered
 `teeSigner` key (simulated-TEE custody, same `WD_MATCH_V1`/`ecrecover` scheme as the enclave —
-byte-compatibility proven in `extension/smoketest/`). The enclave itself is live and registered
-separately (see `docs/fce-runbook.md`).
+byte-compatibility proven in `extension/smoketest/`).
+
+### The enclave loop — signed by the live enclave, end to end
+
+The run below is the one that matters for Bounty 2: **nothing was self-signed**. A sealed (ECIES)
+RFQ went into the live enclave, a maker quote was authenticated inside it by EIP-712, the enclave
+matched them and signed the `MatchInstruction` with its own in-enclave key, and the escrow accepted
+that signature onchain (`ecrecover == teeSigner`) before the FDC-proven XRPL payment released the
+FXRP. One continuous flow.
+
+| Stage | Receipt |
+|---|---|
+| Sealed RFQ → enclave (`rfqId` = keccak256 of the ciphertext) | `0xddea516f…da38` |
+| Enclave signer, verified by local `ecrecover` before any tx | [`0x56564F61…c18B`](https://coston2-explorer.flare.network/address/0x56564F61588bB110E0712c3938aDa4338e6cc18B) |
+| `lock()` — escrow accepted the **enclave's** signature | https://coston2-explorer.flare.network/tx/0x58ec0e5e8e7b4e8ec85b86be863c62565a1292c210420e36b5f382196de5d1db |
+| XRPL payment (1,005,708 drops, destination tag 1) | https://testnet.xrpl.org/transactions/D44BAE4B51F3A5B0F9CAF8510E4308A331547B1BFDDA5EF3059AB26DC9DB548A |
+| FDC attestation request (voting round 1405105) | https://coston2-explorer.flare.network/tx/0x36e9e649b8d123369dbe0ede36fa2703bce8deb701c0f0270ab7689802f0a5e8 |
+| `release()` — maker received 1.0 FXRP | https://coston2-explorer.flare.network/tx/0xb6b01c627771323542db03e7a911026139aa1e5a4e81c65dfd08866e21cbdfad |
+
+Enclave-loop escrow: [`0x20A885cb…7023`](https://coston2-explorer.flare.network/address/0x20A885cb6ed3F652C5Fcb6a683CE74436F6a7023)
+(its `teeSigner` **is** the live enclave). Reproduce with `scripts/enclave-loop/` — see that
+directory plus `extension/fcewire/PROTOCOL.md` for the wire protocol.
+
+Honest scope note: for this demo the RFQ enters over `POST /direct` behind an API key with
+`WD_ALLOW_DIRECT_RFQ=true`, so the taker identity in the envelope is self-attested rather than
+chain-authenticated. The production ingress is `WhisperDeskInstructionSender.submitRfq`, which binds
+`msg.sender` onchain; that contract is still a stub. Everything downstream of ingress — sealing,
+in-enclave matching, EIP-712 maker auth, enclave signing, and the onchain `ecrecover` check — is the
+real path. The enclave runs in simulated-TEE mode (`magic_pass`), and its identity key regenerates
+on every restart by design (see `docs/enclave-deploy-checklist.md`).
 
 ## Judge quickstart (5 minutes)
 

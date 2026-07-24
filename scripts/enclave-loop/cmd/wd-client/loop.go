@@ -49,6 +49,10 @@ func runLoop(args []string) error {
 	resultTimeout := fs.Duration("result-timeout", 30*time.Second, "how long to poll for each action's result before giving up")
 	windowWait := fs.Duration("window-wait", 5*time.Second, "extra buffer added after windowEndsAt before submitting RFQ_MATCH")
 	matchRetries := fs.Int("match-retries", 5, "retries for RFQ_MATCH on WD_ERR_WINDOW_OPEN before giving up")
+	makerKey := fs.String("maker-key", os.Getenv("MAKER_PRIVATE_KEY"), "maker private key (hex, env MAKER_PRIVATE_KEY) — when set, the "+
+		"EIP-712 Quote signature is computed here, AFTER rfqId is known. Required unless quote.json already carries a valid `sig` "+
+		"bound to this exact rfqId (it usually cannot: rfqId = keccak256(RFQ ciphertext), knowable only from the RfqAck)")
+	escrowFlag := fs.String("escrow", os.Getenv("ESCROW_ADDRESS"), "DvPEscrow address used as the EIP-712 verifyingContract when signing the quote")
 	rfqIDFlag := fs.String("rfq-id", "", "already-known rfqId (0x…32B) — skips RFQ_SUBMIT entirely. REQUIRED against the real "+
 		"handler: extension/fcewire.Handler.HandleDirect has no RFQ_SUBMIT case (PROTOCOL.md §2/§3 — "+
 		"confirmed from source, not assumed), so RFQ_SUBMIT must be driven onchain via "+
@@ -120,7 +124,9 @@ func runLoop(args []string) error {
 		// just erroring opaquely.
 		logf("submitting RFQ_SUBMIT via /direct (NOTE: the real handler rejects this ingress for " +
 			"RFQ_SUBMIT — see WD_ERR_PATH handling below)...")
-		rfqAction, rfqResult, err := sealAndSubmit(client, info, wire.OpCommandRFQSubmit, rfqRaw, *pollInterval, *resultTimeout)
+		// RFQ_SUBMIT's message is abi.encode(sender, ciphertext) — NOT a bare ECIES blob (see
+		// envelope.go / fcewire's decodeRfqEnvelope), so it uses its own submitter.
+		rfqAction, rfqResult, err := sealEnvelopeAndSubmit(client, info, rfqRaw, *pollInterval, *resultTimeout)
 		if err != nil {
 			return fmt.Errorf("RFQ_SUBMIT: %w", err)
 		}
@@ -150,6 +156,20 @@ func runLoop(args []string) error {
 
 	// --- QUOTE_SUBMIT (this DOES work via /direct against the real handler — confirmed) ---
 	quoteFields["rfqId"] = rfqID.Hex()
+
+	// The maker's EIP-712 signature binds rfqId, so it can only be produced now. Skipped only if
+	// the caller supplied a pre-signed quote (--maker-key empty).
+	if *makerKey != "" {
+		if !common.IsHexAddress(*escrowFlag) {
+			return fmt.Errorf("--escrow (or ESCROW_ADDRESS) must be the DvPEscrow address to sign the quote; got %q", *escrowFlag)
+		}
+		makerAddr, err := applyQuoteSignature(quoteFields, *makerKey, chainID, common.HexToAddress(*escrowFlag), rfqID)
+		if err != nil {
+			return fmt.Errorf("signing quote: %w", err)
+		}
+		logf("quote signed (EIP-712) by maker=%s verifyingContract=%s", makerAddr.Hex(), common.HexToAddress(*escrowFlag).Hex())
+	}
+
 	quoteJSON, err := json.Marshal(quoteFields)
 	if err != nil {
 		return fmt.Errorf("re-marshaling quote payload with rfqId set: %w", err)

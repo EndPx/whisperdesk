@@ -1,1 +1,6 @@
 node_modules/
+wd-client
+wd-client.exe
+# run artifacts (contain a specific run's rfqId / signature)
+match.json
+quote-signed.json

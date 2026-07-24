@@ -9,6 +9,18 @@ type Receipt = {
 
 const RECEIPTS: Receipt[] = [
   {
+    label: "enclave-signed lock() — nothing self-signed",
+    detail: "ecrecover == live enclave 0x5656…c18B",
+    tx: "0x58ec…d1db",
+    href: `${EXPLORER}/tx/0x58ec0e5e8e7b4e8ec85b86be863c62565a1292c210420e36b5f382196de5d1db`,
+  },
+  {
+    label: "enclave loop · release() → maker got FXRP",
+    detail: "sealed RFQ → TEE match → FDC proof → settled ✓",
+    tx: "0xb6b0…dfad",
+    href: `${EXPLORER}/tx/0xb6b01c627771323542db03e7a911026139aa1e5a4e81c65dfd08866e21cbdfad`,
+  },
+  {
     label: "XRPL payment",
     detail: "tesSUCCESS",
     tx: "097B23FD…BAA6",
@@ -35,7 +47,8 @@ const RECEIPTS: Receipt[] = [
 
 const STATS = [
   "100/100 tests green",
-  "DvPEscrow 0x5f32…FB9B",
+  "enclave signer 0x5656…c18B",
+  "enclave escrow 0x20A8…7023",
   "FCE extension 0x…010069",
   "live at fce.endpx.cloud",
 ];
