@@ -47,26 +47,27 @@ In `MODE=1` (simulated, what this stack runs — see `.claude/context/deployment
   the `WD_*` vars being added are not yet read by any code (`grep` across the scaffold repo finds zero
   consumers), so there is no functional reason to restart `extension-tee` just to pick them up today.
 
-**0.2 — directory layout / build context.** `docker-compose.yaml`'s `extension-tee.build` uses
-`context: ../..` + `dockerfile: extension-examples/extension-scaffold/Dockerfile`, which assumes a
-nested layout (`tee/{tee-node/, extension-examples/extension-scaffold/}`). `docs/fce-runbook.md`
-already documents that the flat sibling layout actually used here (`fce/{fce-extension-scaffold/,
-tee-node/, tee-proxy/}`) needs `context: ..` + `dockerfile: fce-extension-scaffold/Dockerfile`
-instead, and flags this as **identified but not yet applied**. The tracked `go.mod` on the VPS may or
-may not already carry the matching `replace .../tee-node => ../tee-node` fix (this local checkout
-does — it's an uncommitted local-only edit here; do **not** blindly `git apply`/overwrite the VPS's
-`go.mod` with this local one without first diffing it against what's live there).
+**0.2 — directory layout / build context (verified 24 Jul, VPS is already correct).** The live VPS
+checkout at `/root/whisperdesk/fce-extension-scaffold` already runs the **flat** sibling layout
+correctly: `docker-compose.yaml` has `context: ..` + `dockerfile: fce-extension-scaffold/Dockerfile`,
+the `Dockerfile` `COPY`s `fce-extension-scaffold/` + `WORKDIR /build/fce-extension-scaffold`, and
+`go.mod` has `replace github.com/flare-foundation/tee-node => ../tee-node` — all confirmed by fetching
+the three files off the VPS and diffing. **The local checkout has now been brought into line with the
+VPS** (its `docker-compose.yaml`/`Dockerfile` previously carried the upstream *nested*
+`context: ../..` + `extension-examples/extension-scaffold/` paths — that was a local-only staleness,
+NOT the VPS state). So a content diff of the local vs VPS `docker-compose.yaml` is now **env
+additions only** (the `DIRECT_API_KEY` / `WD_*` passthrough and the `127.0.0.1:6673` bind default);
+the `Dockerfile` differs only by one comment line.
 
-Before running `docker compose build extension-tee` on the VPS:
+**Do NOT overwrite the VPS `docker-compose.yaml`/`Dockerfile`/`go.mod` wholesale** — the build-context
+lines are already right there and identical; only the env-passthrough hunks need to land. Apply them
+with `git apply --check` (which will cleanly add just those hunks) or paste them by hand. Sanity-check
+before any build:
 ```bash
 cd /root/whisperdesk/fce-extension-scaffold
-docker compose -f docker-compose.yaml -f docker-compose.coston2.yaml config | grep -A4 'dockerfile\|context:'
-git diff go.mod   # confirm the replace path matches the VPS's actual on-disk sibling layout
+docker compose -f docker-compose.yaml -f docker-compose.coston2.yaml config | grep -A4 'context:\|dockerfile'
+# expect: context: /root/whisperdesk  +  dockerfile: .../fce-extension-scaffold/Dockerfile
 ```
-If the resolved `context`/`dockerfile` don't point at real files (`ls <context>/tee-node`, `ls
-<context>/extension-examples/extension-scaffold` or the flat equivalent), **fix the compose build
-section and go.mod replace path first** — do not attempt the build. This is orthogonal to the
-`[direct]`/port changes below (different section of the file) and does not block them.
 
 **0.3 — this pass never restarts `extension-tee`.** Given 0.1, the plan below only restarts
 `ext-proxy`. `extension-tee`'s new `WD_*` env passthrough is inert (no code reads it yet) and stays
@@ -74,22 +75,27 @@ staged in `.env`/compose for a deliberate future rebind (§5), not exercised her
 
 ## 1. Sync the diffs to the VPS
 
-From this local checkout, either:
-```bash
-# Option A: rsync the touched files directly (no git needed on the VPS side for these three)
-rsync -av "D:/Belajar/Hackacton/fce/fce-extension-scaffold/config/proxy/extension_proxy.coston2.docker.toml.example" \
-  vps:/root/whisperdesk/fce-extension-scaffold/config/proxy/
-rsync -av "D:/Belajar/Hackacton/fce/fce-extension-scaffold/docker-compose.yaml" \
-  vps:/root/whisperdesk/fce-extension-scaffold/docker-compose.yaml
+Two things go up: (a) the **new Go handler source** (`internal/wd/` + the `internal/extension/*.go`
+edits — these must be in the image, so they gate the `extension-tee` rebuild), and (b) the
+**`docker-compose.yaml` env-passthrough hunks** (build-context is already correct on the VPS per
+§0.2 — do NOT overwrite the whole file).
 
-# Option B: git diff + apply (safer — shows exactly what changes, lets you review before applying)
+```bash
+# (a) handler source — rsync the two dirs the sync script produced (verified build-clean locally)
+rsync -av --delete "D:/Belajar/Hackacton/fce/fce-extension-scaffold/internal/wd/" \
+  vps:/root/whisperdesk/fce-extension-scaffold/internal/wd/
+rsync -av "D:/Belajar/Hackacton/fce/fce-extension-scaffold/internal/extension/" \
+  vps:/root/whisperdesk/fce-extension-scaffold/internal/extension/
+
+# (b) compose env hunks ONLY — generate a diff of just the env lines and apply with --check first.
 cd "D:/Belajar/Hackacton/fce/fce-extension-scaffold"
-git diff -- docker-compose.yaml config/proxy/extension_proxy.coston2.docker.toml.example > /tmp/direct-enable.diff
-scp /tmp/direct-enable.diff vps:/root/whisperdesk/fce-extension-scaffold/
-ssh vps 'cd /root/whisperdesk/fce-extension-scaffold && git apply --check direct-enable.diff && git apply direct-enable.diff'
+git diff -- docker-compose.yaml > /tmp/compose-env.diff   # after the 0.2 fix this is env-additions only
+scp /tmp/compose-env.diff vps:/root/whisperdesk/fce-extension-scaffold/
+ssh vps 'cd /root/whisperdesk/fce-extension-scaffold && git apply --check compose-env.diff && git apply compose-env.diff'
 ```
-`--check` first because the live `docker-compose.yaml` on the VPS may have already diverged from
-what git tracks (see 0.2) — if `git apply` fails, merge the hunks by hand instead of forcing it.
+`--check` first — if it fails, the VPS `docker-compose.yaml` diverged; **merge only the env hunks by
+hand**, never overwrite the build-context lines (they are already the correct flat-layout values).
+Confirm afterward with the `docker compose ... config | grep context:` check from §0.2.
 
 **The actual live `config/proxy/extension_proxy.coston2.docker.toml` (not the `.example`) is
 gitignored** — it holds the real Indexer DB credentials and was never in this checkout (confirmed:
