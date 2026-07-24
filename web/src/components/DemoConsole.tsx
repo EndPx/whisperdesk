@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PartyCard, BalanceRow, Rail, type PillSpec, type Ring } from "@/components/flow/parts";
+import WalletMode from "@/components/WalletMode";
 
 /* ---------------------------------------------------------------------------
    DemoConsole — the live judge-facing console at /demo.
@@ -131,6 +132,9 @@ export default function DemoConsole() {
   const [takerFxrp, setTakerFxrp] = useState(0);
   const [makerFxrp, setMakerFxrp] = useState(0);
   const [vaultFxrp, setVaultFxrp] = useState(0);
+
+  const [mode, setMode] = useState<"one-click" | "wallet">("one-click");
+  const [walletBusy, setWalletBusy] = useState(false);
 
   const [runPath, setRunPath] = useState<"happy" | "default" | null>(null);
   const [busy, setBusy] = useState(false);
@@ -451,52 +455,46 @@ export default function DemoConsole() {
      Render
   ------------------------------------------------------------------------ */
 
-  if (enabled === null) {
-    return (
-      <div className="panel mt-10 px-6 py-8 sm:px-8 sm:py-10">
-        <p className="mono-label text-[0.68rem] text-ink-3 flex items-center gap-2">
-          <span className="ice-dot" />
-          Connecting to the live console…
-        </p>
-      </div>
-    );
-  }
+  const switcherDisabled = !!runPath || walletBusy;
 
-  if (enabled === false) {
-    return (
-      <div className="panel mt-10 px-6 py-8 sm:px-8 sm:py-10">
-        <p className="mono-label text-[0.68rem] text-ink-3 mb-3">Live console</p>
-        <h3 className="font-display font-semibold text-[1.3rem] text-ink mb-3">
-          The live console is sleeping.
-        </h3>
-        <p className="max-w-[54ch] text-[0.95rem] leading-[1.65] text-ink-2 mb-6">
-          The demo backend isn&apos;t running right now. You can run the identical settlement yourself from
-          the command line — it drives the same lock → pay → attest → release flow this console would.
-        </p>
-        <pre className="mono-data text-[0.82rem] text-ink-2 bg-vault-2 border border-steel-line px-4 py-3 overflow-x-auto mb-6 whitespace-pre">
+  const oneClickBody = enabled === null ? (
+    <div className="panel mt-6 px-6 py-8 sm:px-8 sm:py-10">
+      <p className="mono-label text-[0.68rem] text-ink-3 flex items-center gap-2">
+        <span className="ice-dot" />
+        Connecting to the live console…
+      </p>
+    </div>
+  ) : enabled === false ? (
+    <div className="panel mt-6 px-6 py-8 sm:px-8 sm:py-10">
+      <p className="mono-label text-[0.68rem] text-ink-3 mb-3">Live console</p>
+      <h3 className="font-display font-semibold text-[1.3rem] text-ink mb-3">
+        The live console is sleeping.
+      </h3>
+      <p className="max-w-[54ch] text-[0.95rem] leading-[1.65] text-ink-2 mb-6">
+        The demo backend isn&apos;t running right now. You can run the identical settlement yourself from
+        the command line — it drives the same lock → pay → attest → release flow this console would.
+      </p>
+      <pre className="mono-data text-[0.82rem] text-ink-2 bg-vault-2 border border-steel-line px-4 py-3 overflow-x-auto mb-6 whitespace-pre">
 {`cd scripts/e2e && npm install
 npm run happy-path`}
-        </pre>
-        <p className="mono-label text-[0.6rem] text-ink-3 mb-3">Proven receipts from a real run</p>
-        <div className="flex flex-col gap-2">
-          {FALLBACK_RECEIPTS.map((r) => (
-            <a
-              key={r.href}
-              href={r.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mono-data text-[0.82rem] text-ice hover:underline break-all"
-            >
-              {r.label} → {shortHash(r.href.split("/").pop() ?? "")}
-            </a>
-          ))}
-        </div>
+      </pre>
+      <p className="mono-label text-[0.6rem] text-ink-3 mb-3">Proven receipts from a real run</p>
+      <div className="flex flex-col gap-2">
+        {FALLBACK_RECEIPTS.map((r) => (
+          <a
+            key={r.href}
+            href={r.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mono-data text-[0.82rem] text-ice hover:underline break-all"
+          >
+            {r.label} → {shortHash(r.href.split("/").pop() ?? "")}
+          </a>
+        ))}
       </div>
-    );
-  }
-
-  return (
-    <div className="mt-10 space-y-8">
+    </div>
+  ) : (
+    <div className="mt-6 space-y-8">
       {escrow && (
         <p className="mono-label text-[0.56rem] text-ink-3">
           Escrow <span className="text-ink-2">{shortHash(escrow)}</span>
@@ -603,6 +601,45 @@ npm run happy-path`}
           )}
         </div>
       </div>
+    </div>
+  );
+
+  return (
+    <div className="mt-10">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setMode("one-click")}
+          disabled={switcherDisabled}
+          aria-pressed={mode === "one-click"}
+          className={`mono-label text-[0.62rem] px-4 py-2 border transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none ${
+            mode === "one-click"
+              ? "border-ice/50 text-ice bg-ice/10"
+              : "border-steel-line-2 text-ink-2 hover:text-ink hover:border-ice-deep/60"
+          }`}
+        >
+          One-click
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode("wallet")}
+          disabled={switcherDisabled}
+          aria-pressed={mode === "wallet"}
+          className={`mono-label text-[0.62rem] px-4 py-2 border transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none ${
+            mode === "wallet"
+              ? "border-ice/50 text-ice bg-ice/10"
+              : "border-steel-line-2 text-ink-2 hover:text-ink hover:border-ice-deep/60"
+          }`}
+        >
+          Be the taker
+        </button>
+      </div>
+
+      {mode === "one-click" ? (
+        oneClickBody
+      ) : (
+        <WalletMode onSwitchToOneClick={() => setMode("one-click")} onBusyChange={setWalletBusy} />
+      )}
     </div>
   );
 }
