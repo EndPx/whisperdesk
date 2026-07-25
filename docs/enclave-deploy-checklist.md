@@ -180,8 +180,10 @@ WD_MIN_BLOCK_FXRP_RAW=1000000        # 1 FXRP, 6-dec raw — matches MIN_BLOCK_F
 WD_BAND_BPS=<pick a value — design.md §3.6/§3.12 band check, currently ±1% = 100 bps>
 WD_QUOTE_TTL_SEC=<pick a value — design.md §3.6 instructionExpiresAt is +300s today>
 # Demo-only: enables the /direct RFQ_SUBMIT bypass (extension/fcewire/PROTOCOL.md "Demo ingress
-# (WD_ALLOW_DIRECT_RFQ)") for the live demo loop while WhisperDeskInstructionSender is still a stub.
-# Exact string "true" enables it; leave unset/anything else once the real onchain sender ships.
+# (WD_ALLOW_DIRECT_RFQ)"). Kept on because the website's one-click demo has to finish inside a
+# browser session; the onchain sender (WhisperDeskInstructionSender, deployed and registry-enforced)
+# is the real ingress and needs the auction window plus two extra transactions.
+# Exact string "true" enables it; unset it to make RFQ_SUBMIT onchain-only.
 WD_ALLOW_DIRECT_RFQ=<"true" to enable, unset otherwise>
 ```
 

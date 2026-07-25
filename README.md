@@ -49,6 +49,26 @@ This is a hackathon prototype, and these are its scope boundaries, not apologies
 - **Default protection.** A 1% maker bond is posted at match time and slashed to the taker if the
   maker never pays; `refund()` is permissionless after `refundAfter + REFUND_GRACE`.
 
+## Why this needs a TEE and not just a smart contract
+
+An RFQ *is* the sensitive data: side, size, limit price, and who is asking. A smart contract keeps no
+secrets — anything it can read, the mempool and every indexer can read too, before the trade fills.
+That is precisely the information a front-runner needs, so "put the order book on-chain" defeats the
+product at the first step.
+
+Commit–reveal does not rescue it either. The matcher has to see *both* sides in the clear at the same
+moment to decide whether they cross, and revealing at match time publishes the losing orders and the
+winner's size anyway. What the desk needs is a place that can hold a secret, run one deterministic
+matching rule over it, and then prove what it did — which is what a TEE is for.
+
+But a TEE alone would just relocate the trust: you would be handing an opaque box your funds. So the
+enclave is deliberately given the *least* power that still works — it is trusted for secrecy only,
+never with custody. It emits one signed instruction, and the chain independently re-checks every part
+of it that matters: `ecrecover == teeSigner`, an FTSOv2 ±1% band recomputed on-chain, an FDC proof of
+the actual XRPL payment bound to that one escrow, deadlines, and bond slashing. A fully compromised
+enclave can leak order flow and fill at the edge of the band — a bounded ~1% loss — and still cannot
+move a token. That split is the whole design.
+
 ## Live right now
 
 The FCE extension is registered and running on Coston2, hosted at `https://fce.endpx.cloud`. This
@@ -145,35 +165,50 @@ What you *can* verify independently, without those keys: `node scripts/enclave-l
 (reads Coston2 directly and checks the registry/instruction binding live), `cd contracts && forge test`
 (the full 117/117 suite), and the explorer receipts linked throughout this README.
 
-Honest scope note: for this demo the RFQ enters over `POST /direct` behind an API key with
-`WD_ALLOW_DIRECT_RFQ=true`, so the taker identity in the envelope is self-attested rather than
-chain-authenticated. The production ingress is `WhisperDeskInstructionSender.submitRfq`, which binds
-`msg.sender` onchain; that contract is still a stub. Everything downstream of ingress — sealing,
-in-enclave matching, EIP-712 maker auth, enclave signing, and the onchain `ecrecover` check — is the
-real path. The enclave runs in simulated-TEE mode (`magic_pass`), and its identity key regenerates
-on every restart by design (see `docs/enclave-deploy-checklist.md`).
+Scope note: the receipts in *this* table came in over `POST /direct` with `WD_ALLOW_DIRECT_RFQ=true`,
+where the taker identity in the envelope is self-attested. That is the ingress the website's
+one-click demo uses, because it has to finish inside a browser session. The chain-authenticated
+ingress — `WhisperDeskInstructionSender.submitRfq`, which stamps the taker from `msg.sender` — is
+deployed, registry-enforced, and has settled end to end; its receipts are in the next section.
+Everything downstream of either ingress is identical: sealing, in-enclave matching, EIP-712 maker
+auth, enclave signing, and the onchain `ecrecover` check. The enclave runs in simulated-TEE mode
+(`magic_pass`), and its identity key regenerates on every restart by design (see
+`docs/enclave-deploy-checklist.md`).
 
 ## Judge quickstart (5 minutes)
 
-1. **Confirm the enclave is alive:**
+Nothing to install for step 1. Steps 2–3 need [Foundry](https://getfoundry.sh) (`curl -L
+https://foundry.paradigm.xyz | bash && foundryup`) and Node 20+.
+
+1. **Confirm the enclave is alive** — no tooling required:
    ```bash
    curl -s https://fce.endpx.cloud/info
    ```
-   Returns a signed `TeeInfo` (pubkey, codeHash, platform, teeID).
+   Returns a signed `TeeInfo`: `publicKey{x,y}`, `codeHash`, `platform` (hex — decodes to
+   `TEST_PLATFORM`, i.e. simulated), `chainId: 114`, `attestation: "magic_pass"`, and
+   `machineData.extensionId` = `0x…010069` (65641).
 
-2. **Run the contract test suite** (117/117 passing, verified locally):
+2. **Run the contract test suite** — needs Foundry (117/117 passing):
    ```bash
    cd contracts && forge test --summary
    ```
    `BondLedgerTest` (17), `DvPEscrowTest` (66), `ForkFdcReleaseTest` (3), `ForkFtsoBandTest` (4),
    `GoldenVectorsTest` (4), `InvariantsTest` (4, fuzz/invariant), `MatcherToLockTest` (2),
    `WhisperDeskInstructionSenderTest` (17) — 117 passed, 0 failed.
+   The two `Fork*` suites fork Coston2, so they need network access.
 
-3. **Optional: Go↔Solidity ABI parity + TEE signing smoke test:**
+3. **Verify the chain-authenticated ingress against live chain state** — needs only Node:
    ```bash
-   cd extension/matcher && CGO_ENABLED=0 go test ./...   # golden-vector parity with Solidity
+   cd scripts/enclave-loop && npm install && node verify-onchain-rfq.mjs
    ```
-   See also `extension/smoketest/` for the enclave-side `ecrecover` signature check.
+   Reads Coston2 directly and asserts that the RFQ instruction's message decodes to
+   `abi.encode(<the transaction's own sender>, <ECIES ciphertext>)` — i.e. the taker was stamped by
+   the contract, not supplied by the client. No keys, no config.
+
+   *Not runnable from a standalone clone:* `extension/matcher`'s Go parity tests and
+   `extension/smoketest/` resolve `tee-node` through a `replace` directive pointing at Flare's
+   `fce-*` repos as sibling checkouts, which only exist on an operator machine. The parity they
+   prove is also covered by `GoldenVectorsTest`/`MatcherToLockTest` in step 2, which anyone can run.
 
 4. **Optional — run your own full live DvP trade end-to-end** (not just read the receipts above):
    deploy your own `DvPEscrow` instance (you become its owner + `teeSigner`, so you can self-sign
