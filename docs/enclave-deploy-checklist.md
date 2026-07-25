@@ -382,3 +382,45 @@ new). The remaining risk is entirely operational (a single owner-gated `setExten
 prerequisite deploy), not a code-correctness question — switching the live extension is safe to attempt in a
 deliberate window, following the exact steps above, with `.claude/context/deployments.md` updated immediately
 after.
+
+## Fixing the stale TEE machine registration (the last onchain-ingress gap)
+
+**Symptom.** `submitRfq` lands onchain correctly, but the enclave never consumes the instruction.
+`node scripts/enclave-loop/onchain-ingress-readiness.mjs` reports check A as STALE.
+
+**Cause (verified on-chain 25 Jul).** `getRandomTeeIds(65641, 1)` returns
+`0x1832e33F99cF5628f6Dc7Ae34e6011995BFdE4BD` — the TEE identity from before the 24 Jul WD_RFQ
+rebuild. The running enclave is `0x56564F61588bB110E0712c3938aDa4338e6cc18B`. The identity key
+regenerates on every enclave boot, so the rebuild orphaned the registration and onchain instructions
+are routed to a machine that no longer exists. `/direct` bypasses machine routing entirely, which is
+why the live demo and the enclave loop are unaffected.
+
+Note the signing policy is NOT the blocker: the enclave's `lastSigningPolicyId` (5857) matches
+`FlareSystemsManager.getCurrentRewardEpochId()` (5857). ext-proxy's repeated
+`signing policy 5858 not yet on chain; waiting` is ordinary look-ahead for the next epoch.
+
+**Fix — two transactions, in this order.** `MachineManager` has no remove/deregister; it has
+`pause(address)` (gated `NotOwnerOrPauser`) and the old machine's owner is our deployer key, so the
+dead machine can be taken out of rotation. Pause FIRST so a slot is free before registering — the
+ABI does define a `TooMany` error and the per-extension cap is unknown.
+
+```bash
+# 1. take the dead machine out of rotation (simulated clean from the deployer key)
+cast send 0x1a9C4A0f9D76c0b1D91d22E24E573a9b377618aE "pause(address)" \
+  0x1832e33F99cF5628f6Dc7Ae34e6011995BFdE4BD \
+  --rpc-url https://coston2-api.flare.network/ext/C/rpc --private-key $PRIVATE_KEY
+
+# 2. register the enclave that is actually running (⛔ irreversible-ish — read §0.1 first)
+ssh root@76.13.179.205
+cd /root/whisperdesk/fce-extension-scaffold && ./scripts/post-build.sh
+
+# 3. confirm, then re-test the onchain path
+node scripts/enclave-loop/onchain-ingress-readiness.mjs      # expect READY
+```
+
+`post-build.sh` runs allow-tee-version → set-governance → register-tee. Because the running enclave's
+teeID is not yet registered, register-tee takes the `PreRegistration` branch (a fresh registration,
+not a re-registration), so the `ChallengeExpired` hazard that motivates `-command rRap` does not
+apply — the default `rap` is correct here. Do NOT restart `extension-tee` during this: another boot
+would rotate the identity again and invalidate the registration you just made (and
+`DvPEscrow.setTeeSigner` with it).
