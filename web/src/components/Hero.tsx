@@ -10,7 +10,7 @@ export default function Hero() {
     <section id="top" className="pt-20 pb-24 sm:pt-28 sm:pb-32">
       <div className="mx-auto max-w-[1120px] px-6 sm:px-8">
         <p className="mono-label text-[0.72rem] text-ink-3 mb-7">
-          Private OTC desk · XRP ↔ FXRP · Flare Confidential Compute
+          Private OTC settlement · XRP ↔ FXRP · proven live on Coston2
         </p>
 
         <h1 className="font-display font-semibold text-[2.5rem] leading-[1.08] sm:text-[3.4rem] sm:leading-[1.06] tracking-tight max-w-3xl text-balance">
@@ -47,10 +47,14 @@ export default function Hero() {
         </h1>
 
         <p className="mt-7 max-w-[62ch] text-[1.05rem] leading-[1.7] text-ink-2">
-          A dark OTC desk for institutional XRP↔FXRP block trades. Quotes are sealed
-          inside a Trusted Execution Environment, so no one front-runs your order —
-          and settlement is delivery-versus-payment: the escrow releases FXRP only
-          against a Flare Data Connector proof of the exact XRPL payment.
+          WhisperDesk is a working demonstration of private OTC settlement for
+          institutional XRP↔FXRP block trades — proven end to end on Flare testnet,
+          not a desk trading real size today. Quotes are sealed inside a Trusted
+          Execution Environment so no one can front-run an order in flight, and
+          settlement is delivery-versus-payment on-chain: the escrow releases FXRP
+          only against a Flare Data Connector proof of the exact XRPL payment. Thin
+          FXRP liquidity is exactly why that order flow has nowhere safe to happen
+          yet — this is the mechanism built for when it does.
         </p>
 
         <div id="hero-ctas" className="mt-10 flex flex-wrap items-center gap-4">

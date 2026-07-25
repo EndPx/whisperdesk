@@ -58,9 +58,17 @@ export default function Proof() {
     <section id="proof" className="py-20 sm:py-28">
       <div className="mx-auto max-w-[1120px] px-6 sm:px-8">
         <p className="mono-label text-[0.72rem] text-ink-3 mb-4">The receipts</p>
-        <h2 className="font-display font-semibold text-[1.9rem] sm:text-[2.4rem] leading-[1.12] tracking-tight max-w-2xl text-balance mb-14">
+        <h2 className="font-display font-semibold text-[1.9rem] sm:text-[2.4rem] leading-[1.12] tracking-tight max-w-2xl text-balance mb-5">
           Not a mockup — it settled on-chain.
         </h2>
+
+        <p className="max-w-[62ch] text-[0.95rem] leading-[1.7] text-ink-2 mb-14">
+          Every receipt below is a real transaction — signed by the live enclave, verified by the
+          real FDC, settled on real Coston2. The token changing hands is MockFXRP, a mintable
+          Coston2 test asset, not FAssets-minted FXRP: the escrow, the proof check, and the bond
+          slashing around it are the real machinery; the asset is a stand-in until there is FXRP
+          liquidity worth proving this against.
+        </p>
 
         <div className="grid gap-px bg-steel-line sm:grid-cols-2">
           {RECEIPTS.map((r) => {

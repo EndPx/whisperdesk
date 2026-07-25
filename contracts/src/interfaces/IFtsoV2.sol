@@ -4,9 +4,9 @@ pragma solidity 0.8.25;
 /// @title IFtsoV2
 /// @notice Minimal local interface mirroring Flare's `FtsoV2Interface` block-latency feed reads
 /// (.claude/context/flare-docs/ftsov2.md §4). Only the wei-variant + fee are exposed — decimals are
-/// never hand-parsed (ftsov2.md §5: "Do not hardcode the number of decimals for a feed"). Step 1:
-/// injected as a mock address via the DvPEscrow constructor. TODO(Step 5): resolve the real
-/// `FtsoV2` address via FlareContractRegistry.getFtsoV2() instead of constructor injection.
+/// never hand-parsed (ftsov2.md §5: "Do not hardcode the number of decimals for a feed"). The real
+/// `FtsoV2` address is resolved live via FlareContractRegistry.getFtsoV2() in the deploy script and
+/// injected via the DvPEscrow constructor (see `script/DeployIntegration.s.sol`).
 interface IFtsoV2 {
     /// @notice Returns the feed value already normalized to 18 decimals, and its timestamp.
     function getFeedByIdInWei(bytes21 _feedId) external payable returns (uint256 _value, uint64 _timestamp);

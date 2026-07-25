@@ -15,11 +15,13 @@ import {ReentrancyGuardTransient} from "./utils/ReentrancyGuardTransient.sol";
 /// a maker only against an FDC `XRPPayment` proof bound to this exact escrow instance; refunds the
 /// taker (+ slashes the maker's bond to the taker) if no valid proof lands before the deadline.
 ///
-/// Step 1 note (design.md §12 Step 1 / task sub-task (e)): `ftsoV2` and `fdcVerification` are
-/// injected via the constructor (mock addresses in tests). TODO(Step 5): resolve both — plus FXRP —
-/// via `FlareContractRegistry` (0xaD67FE66660Fb8dFE9d6b1b4240d8650e30F6019) in the deploy script and
-/// wire `syncFromRegistry()` to actually re-read them; never hardcode a `FdcVerification` address
-/// (flare-docs/fdc.md and flare-docs/fdc-request-fee.md disagree on it).
+/// `ftsoV2` and `fdcVerification` are resolved once, live, from `FlareContractRegistry`
+/// (0xaD67FE66660Fb8dFE9d6b1b4240d8650e30F6019) in the deploy script (`script/DeployIntegration.s.sol`)
+/// and injected via the constructor; never hardcode a `FdcVerification` address (flare-docs/fdc.md and
+/// flare-docs/fdc-request-fee.md disagree on it — the registry is the only truth). They are stored as
+/// plain, non-`immutable` state precisely so a future re-sync would be possible without redeploying
+/// the escrow, but no code path performs one today: `syncFromRegistry()` (below) is a reserved,
+/// permissionless no-op — see its own natspec for what callers should and should not expect from it.
 contract DvPEscrow is ReentrancyGuardTransient {
     // ---------------------------------------------------------------------
     // Policy constants & window parameters (design.md §3.2)
@@ -73,8 +75,8 @@ contract DvPEscrow is ReentrancyGuardTransient {
 
     address public owner;
     address public teeSigner; // settable — TEE key regenerates on every boot
-    IFtsoV2 public ftsoV2; // "synced" from ContractRegistry (Step 5)
-    IFdcVerification public fdcVerification; // "synced" from ContractRegistry (Step 5)
+    IFtsoV2 public ftsoV2; // registry-resolved once at construction (see contract natspec); never re-synced
+    IFdcVerification public fdcVerification; // registry-resolved once at construction; never re-synced
     address public feeTreasury;
     bool public lockPaused; // gates lock() ONLY — release/refund/withdraw never pausable
 
@@ -493,12 +495,16 @@ contract DvPEscrow is ReentrancyGuardTransient {
         lockPaused = p;
     }
 
-    /// @notice Permissionless re-sync of FtsoV2 + FdcVerification.
-    /// @dev Step 1 STUB: addresses are constructor-injected (mock addresses in tests); this is a
-    /// deliberate no-op. TODO(Step 5): re-read both from `FlareContractRegistry`
-    /// (0xaD67FE66660Fb8dFE9d6b1b4240d8650e30F6019) and update `ftsoV2`/`fdcVerification` here.
+    /// @notice Reserved hook. Currently does nothing — calling it is a safe, permissionless no-op.
+    /// @dev `ftsoV2` and `fdcVerification` are resolved once, live, from `FlareContractRegistry`
+    /// (0xaD67FE66660Fb8dFE9d6b1b4240d8650e30F6019) by the deploy script and injected via the
+    /// constructor (see the contract-level natspec above and `script/DeployIntegration.s.sol`). This
+    /// function is a placeholder entry point kept in case a future deploy ever needs to re-resolve
+    /// either address without redeploying the escrow; no such need has arisen, so the body is
+    /// intentionally empty and there is no pending work behind it. Do not call this expecting
+    /// `ftsoV2`/`fdcVerification` to change — they never do after construction.
     function syncFromRegistry() external {
-        // intentionally empty in Step 1 — see TODO above.
+        // Deliberately empty — see @dev above.
     }
 
     // =========================================================================================

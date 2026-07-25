@@ -1,9 +1,11 @@
 # WhisperDesk
 
-Private OTC desk for institutional XRP↔FXRP block trades. Sealed RFQs are matched inside a Flare
-Confidential Compute (FCE) enclave — side, size, and counterparty never leave it — and settlement
-is delivery-versus-payment (DvP) on Coston2: FXRP is released only against an FDC-proven XRPL
-payment. Built for **Flare Summer Signal** — Bounty 2 (Confidential Compute).
+A working mechanism for private, institutional XRP↔FXRP block trades — proven end to end on Flare
+testnet, not a live desk trading real size yet. Sealed RFQs are matched inside a Flare Confidential
+Compute (FCE) enclave — side, size, and counterparty never leave it — and settlement is
+delivery-versus-payment (DvP) on Coston2: FXRP is released only against an FDC-proven XRPL payment.
+Thin FXRP liquidity means this order flow has nowhere safe to happen today; that gap is exactly
+what this proves out. Built for **Flare Summer Signal** — Bounty 2 (Confidential Compute).
 
 **▶ Try it: https://whisperdesk.endpx.cloud** — runs a real DvP settlement on Coston2 + XRPL Testnet
 in about 3 minutes. Two modes: *Be the taker* (your own MetaMask; the XRP lands on an XRPL address

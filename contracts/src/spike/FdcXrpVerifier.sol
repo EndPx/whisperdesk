@@ -9,10 +9,11 @@ import {IXRPPayment} from "../interfaces/IXRPPayment.sol";
 /// end-to-end that a real XRPL testnet payment can be turned into an FDC `XRPPayment` attestation
 /// whose Merkle proof verifies onchain on Coston2 via `IFdcVerification.verifyXRPPayment`, mirroring
 /// the exact checks `DvPEscrow.release()` will perform (docs/design.md §3.7). The real
-/// `FdcVerification` address is resolved once at construction and held immutable — in production
-/// (Step 5) this must instead be re-resolved from `FlareContractRegistry.getFdcVerification()` at
-/// call time (or refreshed periodically), never hardcoded/frozen forever, since the docs note the
-/// address can change across network releases.
+/// `FdcVerification` address is resolved once at construction and held immutable, exactly like the
+/// shipped `DvPEscrow`: `script/DeployIntegration.s.sol` resolves both `FtsoV2` and `FdcVerification`
+/// live from `FlareContractRegistry` once, before the escrow is deployed, and neither address is ever
+/// re-resolved afterward. Never hardcode this address outside that one registry lookup — the docs
+/// note it can change across network releases.
 contract FdcXrpVerifier {
     IFdcVerification public immutable fdcVerification;
 
