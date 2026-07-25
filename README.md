@@ -19,12 +19,13 @@ This is a hackathon prototype, and these are its scope boundaries, not apologies
   stand-in.
 - **The enclave runs in simulated-TEE mode** (attestation `magic_pass`, `SIMULATED_TEE=true`). Its
   identity key regenerates on every restart by design — there is no persistent enclave identity yet.
-- **Two RFQ ingresses exist.** The onchain one is now real: `WhisperDeskInstructionSender.submitRfq`
-  is deployed and is the registry-enforced instruction sender for our extension, and it stamps the
-  taker from `msg.sender` so the identity cannot be forged (see below). The live *demo* still enters
-  over `POST /direct` (API-keyed, `WD_ALLOW_DIRECT_RFQ=true`), where the taker is self-attested,
-  because the enclave's onchain instruction queue is currently gated on FSP signing-policy cadence
-  on this deployment — infrastructure timing, not our code.
+- **Two RFQ ingresses exist, and both work.** The onchain one is the real design:
+  `WhisperDeskInstructionSender.submitRfq` is the registry-enforced instruction sender for our
+  extension and stamps the taker from `msg.sender`, so the identity cannot be forged — a full
+  settlement has run through it end to end (receipts below). The one-click *demo* on the website
+  still uses `POST /direct` (API-keyed, `WD_ALLOW_DIRECT_RFQ=true`), where the taker is
+  self-attested, because it has to finish inside a browser session rather than wait on the auction
+  window plus two extra onchain transactions.
 
 ## What it does
 
@@ -103,17 +104,29 @@ address that can originate a WD_RFQ instruction.
 | Registry swap — `setExtensionContracts(65641, 0x0, 0x56A903F4…)` | https://coston2-explorer.flare.network/tx/0x00394192a6947f3f2dfc7b7b4ac4d2fabf841d002be77aaa89c4c4b6bf189519 |
 | First onchain `submitRfq` | https://coston2-explorer.flare.network/tx/0xd50dd58c2dd66747dc1caa97077c64a4119b2efe4fb48ced14b3c15b50eef69a |
 
-Why it matters: decode that second transaction's instruction event and the message is
+Why it matters: decode that transaction's instruction event and the message is
 `abi.encode(0xBF164f13…c4F6, <ECIES ciphertext>)` — the taker address was written by the *contract*
-from `msg.sender`, not supplied by the client. A caller cannot claim to be a different taker, which
-is what closes the spoofing gap the `/direct` demo path leaves open (`contracts/test/` proves the
-binding; 117/117 tests green).
+from `msg.sender`, not supplied by the client. A caller cannot claim to be a different taker
+(`contracts/test/` proves the binding; 117/117 tests green). Verify it yourself against live chain
+state: `node scripts/enclave-loop/verify-onchain-rfq.mjs`.
 
-Not yet done: the enclave has not consumed that onchain instruction — `ext-proxy` reports
-`signing policy 5858 not yet on chain; waiting`, so the onchain instruction queue is waiting on FSP
-signing-policy cadence for this deployment. The contract, the registration, and the `msg.sender`
-binding are all live and verifiable now; end-to-end consumption over the onchain queue is the
-remaining step.
+### Full settlement through the onchain ingress
+
+The complete flow, with identity chain-authenticated the whole way — RFQ and match trigger onchain,
+quote over `/direct` (quotes are private maker data and never touch the chain):
+
+| Stage | Receipt |
+|---|---|
+| `submitRfq` onchain — taker bound from `msg.sender` | https://coston2-explorer.flare.network/tx/0x212a33d771927a1b36b46b22da4b7d5dc739ebbad9cdb760825417c45299c481 |
+| `triggerMatch` onchain → enclave matched + signed | https://coston2-explorer.flare.network/tx/0x94ab3378bf6571c6f2235034b18e13e0c578d77e01bad1d6c9a8ce17d975ee0d |
+| `lock()` — escrow accepted the enclave's signature | https://coston2-explorer.flare.network/tx/0x7550a805531c03e2890d2b42ce8c34dc4baa136d82b63d0d2f1c3657af2c89a7 |
+| XRPL payment | https://testnet.xrpl.org/transactions/D0F1D1F4BD9A4EA202341847BE9ECF5236C08249696DA45D2BEC384C014AA4D9 |
+| `release()` — maker received 1.0 FXRP | https://coston2-explorer.flare.network/tx/0xcd660e692e9445f458ca99f285b2d405ffe702585bb4c5d90125c0b4c2811573 |
+
+Reproduce with `scripts/enclave-loop/onchain-loop.mjs` (RFQ → quote → match, prices taken from the
+live FTSOv2 mid so the run doesn't go stale) followed by `run.mjs` (lock → pay → prove → release).
+`onchain-ingress-readiness.mjs` checks the two preconditions first: the registered TEE machine must
+be the one actually running, and the enclave's signing policy must match the on-chain reward epoch.
 
 Honest scope note: for this demo the RFQ enters over `POST /direct` behind an API key with
 `WD_ALLOW_DIRECT_RFQ=true`, so the taker identity in the envelope is self-attested rather than
