@@ -19,9 +19,12 @@ This is a hackathon prototype, and these are its scope boundaries, not apologies
   stand-in.
 - **The enclave runs in simulated-TEE mode** (attestation `magic_pass`, `SIMULATED_TEE=true`). Its
   identity key regenerates on every restart by design — there is no persistent enclave identity yet.
-- **The demo RFQ ingress is `POST /direct`**, behind an API key with `WD_ALLOW_DIRECT_RFQ=true`, so the
-  taker identity in the envelope is self-attested. The production ingress,
-  `WhisperDeskInstructionSender.submitRfq` (binds `msg.sender` onchain), is still a stub.
+- **Two RFQ ingresses exist.** The onchain one is now real: `WhisperDeskInstructionSender.submitRfq`
+  is deployed and is the registry-enforced instruction sender for our extension, and it stamps the
+  taker from `msg.sender` so the identity cannot be forged (see below). The live *demo* still enters
+  over `POST /direct` (API-keyed, `WD_ALLOW_DIRECT_RFQ=true`), where the taker is self-attested,
+  because the enclave's onchain instruction queue is currently gated on FSP signing-policy cadence
+  on this deployment — infrastructure timing, not our code.
 
 ## What it does
 
@@ -87,6 +90,30 @@ FXRP. One continuous flow.
 Enclave-loop escrow: [`0x20A885cb…7023`](https://coston2-explorer.flare.network/address/0x20A885cb6ed3F652C5Fcb6a683CE74436F6a7023)
 (its `teeSigner` **is** the live enclave). Reproduce with `scripts/enclave-loop/` — see that
 directory plus `extension/fcewire/PROTOCOL.md` for the wire protocol.
+
+### Chain-authenticated RFQ ingress
+
+[`WhisperDeskInstructionSender`](https://coston2-explorer.flare.network/address/0x56A903F408C4745D34354Ec230BbfBDD78eC6426)
+(`0x56A903F4…6426`) is deployed and is now the **registry-enforced** instruction sender for extension
+`65641` — the TEE registry rejects `sendInstructions` from any other contract, so this is the only
+address that can originate a WD_RFQ instruction.
+
+| Step | Receipt |
+|---|---|
+| Registry swap — `setExtensionContracts(65641, 0x0, 0x56A903F4…)` | https://coston2-explorer.flare.network/tx/0x00394192a6947f3f2dfc7b7b4ac4d2fabf841d002be77aaa89c4c4b6bf189519 |
+| First onchain `submitRfq` | https://coston2-explorer.flare.network/tx/0xd50dd58c2dd66747dc1caa97077c64a4119b2efe4fb48ced14b3c15b50eef69a |
+
+Why it matters: decode that second transaction's instruction event and the message is
+`abi.encode(0xBF164f13…c4F6, <ECIES ciphertext>)` — the taker address was written by the *contract*
+from `msg.sender`, not supplied by the client. A caller cannot claim to be a different taker, which
+is what closes the spoofing gap the `/direct` demo path leaves open (`contracts/test/` proves the
+binding; 117/117 tests green).
+
+Not yet done: the enclave has not consumed that onchain instruction — `ext-proxy` reports
+`signing policy 5858 not yet on chain; waiting`, so the onchain instruction queue is waiting on FSP
+signing-policy cadence for this deployment. The contract, the registration, and the `msg.sender`
+binding are all live and verifiable now; end-to-end consumption over the onchain queue is the
+remaining step.
 
 Honest scope note: for this demo the RFQ enters over `POST /direct` behind an API key with
 `WD_ALLOW_DIRECT_RFQ=true`, so the taker identity in the envelope is self-attested rather than

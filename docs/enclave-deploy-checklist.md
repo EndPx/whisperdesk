@@ -251,3 +251,134 @@ override via env if you're pointing it at a different escrow.
 Exit `1` is the one that matters most before judging: it means the demo will fail on the very first
 `lock()` a judge tries, even though the site looks fully up. Treat any `1` in the alert log as
 same-day, not "next time someone's on the VPS."
+
+## Onchain RFQ ingress (submitRfq)
+
+Prepared locally only — nothing below has been deployed, sent, or committed. `WhisperDeskInstructionSender.sol`
+is implemented and green (`forge test`, 17/17), but it is **not yet deployed anywhere on Coston2** — it is
+absent from `.claude/context/deployments.md` and from `contracts/broadcast/DeployIntegration.s.sol/114/run-latest.json`
+(which only deployed `MockFXRP`/`BondLedger`/`DvPEscrow`). Deploying + wiring it in is a **separate, deliberate
+action** for a human to run in one window — this section is the record for that window.
+
+### Scout verdict (verbatim)
+
+> **NO_REREGISTRATION_NEEDED** — DEFINITIVE, on-chain-verified: pre-build.sh does NOT need to be re-run. The live
+> extension (id 65641 / 0x...010069) can be pointed at a new WhisperDeskInstructionSender via one governance-style
+> call, with zero effect on the TEE machine, the TEE signer key, or any tee-proxy/tee-node config.
+>
+> 1) How the relay decides whose instructions to accept — it is on-chain only, not env-only, not "both." The
+> registry rejects any `sendInstructions` call where `msg.sender` doesn't match the registered InstructionSender
+> (`fce-extension-scaffold/docs/instruction-sender.md:5-7`). Neither `tee-proxy` nor `tee-node` reference
+> `INSTRUCTION_SENDER`/`instructionSender` anywhere (grepped both repos, zero matches) — the relay's own filtering
+> (`tee-proxy/pkg/machinepath/machinepath.go:100-148`) keys purely on `extensionID`, never on sender-contract
+> address. There is no env var, no proxy-side allowlist to edit. The swap takes effect for the very next
+> `sendInstructions()` call after the tx lands — no extension-tee restart, no TEE-key rotation, no `register-tee`
+> re-run.
+>
+> 2) `register-tee`/MachineManager (`tee-node/internal/node/node.go:82-88`) keys TEE *machines* by `extensionId`,
+> not by instructions-sender address — changing the sender doesn't touch machine registration at all.
+>
+> 3) The setter exists and is owner-gated, and the existing deployer key already IS that owner. The real generated
+> binding — `go-flare-common@v1.2.2-...-c573c79c0924/pkg/contracts/tee/extensionmanager/autogen.go:917` —
+> `setExtensionContracts(uint256 _extensionId, address _teeExtensionStateVerifier, address _teeExtensionInstructionsSender)`,
+> selector `0x6df0108f`, updates an EXISTING extension id's sender in place (distinct from `Register()`, which
+> mints a new id — the scaffold's own `registerExtension()` only ever calls `Register()`, which is why re-running
+> `pre-build.sh` always mints a new id; that's a scaffold-script limitation, not a contract limitation). All TEE
+> facets are bound to one diamond proxy, `FlareTeeManager`, at `0x1a9C4A0f9D76c0b1D91d22E24E573a9b377618aE` on
+> Coston2. Live read-only `eth_call` (Coston2 RPC, 25 Jul 2026), extension id 65641:
+> - `getTeeExtensionInstructionsSender(65641)` = `0x6C2CA15B0c9459a71807e6Fb134874609E9c8790` (matches the
+>   currently-live sender and `deployments.md` exactly)
+> - `getExtensionOwner(65641)` = `0xf4E45BCC0c7dE24bE0c00107C91fb12544B9e125` (matches the deployer key exactly)
+> - `getExtensionOperator(65641)` = `0x0` (unset); `getTeeExtensionStateVerifier(65641)` = `0x0` (unset)
+> - `nextPublicExtensionId()` = `0x1009a` (65690) — confirms the next `pre-build.sh` run really would mint a fresh
+>   id, the orphaning risk already documented in `flare-docs/fcc-fce.md` and `deployments.md`.
+>
+> Simulated (`eth_call` only — no broadcast, no state change, no gas) call to
+> `setExtensionContracts(65641, address(0), <placeholder new sender>)`:
+> - from the deployer/owner key → **no revert**.
+> - from an unrelated random address → reverts with selector `0xcd49fd1d`, decoded against the ABI's error
+>   list as `OnlyExtensionOwner()`. Triple-confirmed on-chain: the function is genuinely access-controlled, and
+>   the existing deployer key already passes that check for extension 65641 today.
+>
+> 4) The Go extension trusts the **sender field embedded in the instruction payload**, not "which contract sent
+> this." `fce-extension-scaffold/internal/wd/fcewire/handler.go` (`decodeRfqEnvelope`) unpacks
+> `message = abi.encode(msg.sender, ciphertext)` and takes party identity only from that envelope, never from
+> decrypted plaintext. The Go handler has no independent check of which contract address originated the
+> instruction — it relies entirely on layer (3)'s on-chain enforcement. As long as the new
+> `WhisperDeskInstructionSender.sol` correctly does `abi.encode(msg.sender, ciphertext)` in `submitRfq`, the swap
+> is transparent to the Go handler — no code change needed there either.
+
+**Wire-compatibility cross-check performed in this pass** (against the actual `extension/fcewire/handler.go` in
+this repo, not the scaffold copy the scout cited — same contract, confirmed independently):
+- `envelopeArgs = abi.Arguments{{Type: addressTy}, {Type: mustBytesType()}}` in `decodeRfqEnvelope` = `(address, bytes)`,
+  exactly matching `WhisperDeskInstructionSender.submitRfq`'s `message: abi.encode(msg.sender, ciphertext)`.
+- `opHash()` in `handler.go` right-pads the ASCII string into a fixed `[32]byte` — byte-identical to Solidity's
+  `bytes32("...")` literal. The Go string constants (`extension/fcewire/config.go`) are `OPTypeWDRFQ = "WD_RFQ"`,
+  `OPCommandRfqSubmit = "RFQ_SUBMIT"`, `OPCommandRfqMatch = "RFQ_MATCH"` — these match
+  `WhisperDeskInstructionSender.sol`'s `OP_TYPE_WD_RFQ`/`OP_COMMAND_RFQ_SUBMIT`/`OP_COMMAND_RFQ_MATCH` constants
+  character-for-character.
+- `decodeRfqID`'s `len(data) == 32` fast path matches `triggerMatch`'s `message: abi.encode(rfqId)` — `abi.encode`
+  of a lone static `bytes32` has no offset/length word, so it is the raw 32 bytes; confirmed both by inspection
+  and by `test_TriggerMatch_PayloadDecodesToRfqId` asserting `message.length == 32` and `bytes32(message) == rfqId`.
+- **No mismatch found. No contract change was needed.**
+- The `msg.sender`-binding security property is proven by
+  `test_SubmitRfq_DifferentCallerYieldsDifferentEncodedSender`: two different `vm.prank`'d callers each produce
+  a decoded sender equal to themselves and never equal to the other — i.e. a caller cannot make the envelope
+  claim to be anyone but itself (the EVM guarantees `msg.sender` cannot be forged by the caller; this test proves
+  the contract's encoding preserves that guarantee rather than substituting some spoofable self-attested field).
+
+### Exact steps (from the scout, to run in one deliberate window)
+
+1. Deploy `contracts/src/WhisperDeskInstructionSender.sol` to Coston2 from the existing deployer key
+   (`0xf4E45BCC0c7dE24bE0c00107C91fb12544B9e125`). Its constructor + `setExtensionId()` auto-discover extension id
+   65641 from the registry — nothing to hardcode. Record the deployed address in `.claude/context/deployments.md`
+   per `.claude/rules/flare-integration.md`.
+2. (Optional, cheap) Sanity-check the new contract's bytecode is present on-chain (`validate.AddressHasCode`
+   pattern, `fce-extension-scaffold/tools/cmd/register-extension/main.go:36`).
+3. Call `FlareTeeManager` (diamond proxy) at `0x1a9C4A0f9D76c0b1D91d22E24E573a9b377618aE` on Coston2:
+   `setExtensionContracts(65641, address(0), <new WhisperDeskInstructionSender address>)`, selector `0x6df0108f`,
+   from the deployer/owner key. One transaction — no `pre-build.sh`, no `register-tee`, no `post-build.sh`, no
+   docker/container restart. **Pass `address(0)` for `_teeExtensionStateVerifier`** to preserve its current
+   (unset) value.
+4. After the tx mines, re-read `getTeeExtensionInstructionsSender(65641)` via `eth_call` and confirm it now
+   returns the new address; check the emitted `TeeExtensionContractsSet` event.
+5. Do nothing else — no env var changes, no restart of `tee-proxy`/`tee-node`/`extension-tee`, no changes to
+   `internal/wd/fcewire/handler.go` or `config.go`. The old sender (`0x6C2CA15B0c9459a71807e6Fb134874609E9c8790`)
+   remains deployed but becomes inert for this extension immediately — any future call it makes to
+   `sendInstructions()` will revert on `msg.sender` mismatch.
+6. Log the change in `.claude/context/deployments.md` (new sender address, tx hash, timestamp). Unlike the Step 3
+   FCE registration entry (irreversible), this action IS repeatable/correctable — `setExtensionContracts` can be
+   called again later to point at yet another sender.
+
+### Risks
+
+- `setExtensionContracts` is owner-privileged and immediately effective, with no dry-run/timelock observed in the
+  simulation — get the new sender address exactly right before broadcasting. A wrong address breaks RFQ ingress
+  until corrected (recoverable, but do this well before demo day, not last-minute).
+- The registry does not inspect the new contract's code at all
+  (`fce-extension-scaffold/docs/instruction-sender.md:46`). If `submitRfq` did not encode
+  `message = abi.encode(msg.sender, ciphertext)` exactly as `handler.go`'s `decodeRfqEnvelope` expects, RFQ
+  submissions would silently fail sender-binding checks — **this pass re-verified the encoding matches exactly
+  against this repo's actual `handler.go`** (see cross-check above), so this specific risk is closed for the
+  current source, but re-check it again if either side changes.
+- Passing anything other than `address(0)` for `_teeExtensionStateVerifier` in the same call would also change
+  that field (currently unset) — verify calldata encodes exactly `(65641, 0x0, newSenderAddr)`.
+- A possible governance timelock on this facet beyond what the live `eth_call` simulation showed was not fully
+  ruled out (the ABI lists a `GovernanceCallTimelocked` event, inferred to be scoped to system-wide setters, not
+  per-extension owner calls, based on the simulation result and function grouping — not on reading the facet's
+  Solidity source, which wasn't available locally).
+- Everything above (scout's steps 1-6) was investigated read-only via `eth_call` simulation and public getters
+  only — **no transaction has been sent, and `WhisperDeskInstructionSender` has not been deployed**. Treat the
+  exact steps as validated-but-unexecuted; confirm the real broadcast tx succeeds and re-check
+  `getTeeExtensionInstructionsSender(65641)` afterward before treating the swap as done.
+
+### GO/NO-GO
+
+**GO**, with the deploy step still to run. The contract implementation, its `msg.sender`-binding security
+property, and its wire format were independently re-verified in this pass against the actual
+`extension/fcewire/handler.go` in this repo (not just the scaffold copy the scout inspected) with no mismatch
+found and no contract change required; `forge build`/`forge test` are green at 117/117 (100 pre-existing + 17
+new). The remaining risk is entirely operational (a single owner-gated `setExtensionContracts` call plus the
+prerequisite deploy), not a code-correctness question — switching the live extension is safe to attempt in a
+deliberate window, following the exact steps above, with `.claude/context/deployments.md` updated immediately
+after.
