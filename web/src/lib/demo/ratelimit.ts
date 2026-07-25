@@ -14,7 +14,17 @@
 //     purely so the desk doesn't get drained / the demo doesn't go quiet during judging.
 const WINDOW_MS = 24 * 60 * 60 * 1000;
 
-export type RateLimitKind = "demo-lock" | "demo-attest" | "demo-pay";
+export type RateLimitKind =
+  | "demo-lock"
+  | "demo-attest"
+  | "demo-pay"
+  | "maker-faucet"
+  | "maker-open-rfq"
+  | "maker-quote"
+  | "maker-match"
+  | "maker-settle"
+  | "maker-xrpl-account"
+  | "maker-pay";
 
 interface Limits {
   perIp: number;
@@ -31,6 +41,29 @@ const LIMITS: Record<RateLimitKind, Limits> = {
   "demo-lock": { perIp: 3, global: 20 },
   "demo-attest": { perIp: 5, global: 30 },
   "demo-pay": { perIp: 5, global: 30 },
+  // Maker mode (api/maker/*) — same reasoning, own budgets so a maker-mode abuse loop can't starve
+  // (or be starved by) the one-click/wallet-mode budgets above. open-rfq spends the desk's own
+  // taker-funded deposit + a relay fee; match spends a relay fee + the FTSOv2 fee on lock(); settle
+  // spends real Coston2 gas + an FDC request fee (same shape as demo-attest); faucet mints from the
+  // owner key (also has its own per-address 10-min limiter, see wallet-mode.ts's
+  // checkAndRecordFaucetClaim — this IP budget is an additional abuse guard, not a replacement);
+  // xrpl-account calls the external XRPL testnet faucet, not the desk's own funds, but is still
+  // metered to avoid hammering that shared external resource.
+  "maker-faucet": { perIp: 5, global: 30 },
+  "maker-open-rfq": { perIp: 3, global: 20 },
+  // quote spawns a wd-client child process for EVERY call (encrypt + a POST /direct submit gated
+  // by the shared DIRECT_API_KEY) and, unlike open-rfq/match, is reachable without ever holding
+  // the run lock — an unauthenticated caller replaying a valid {rfqId, sig} could otherwise spawn
+  // unbounded child processes / hammer the tee-proxy's API-key budget in a tight loop. Sized a bit
+  // above open-rfq's since re-quoting mid-window is an expected, legitimate part of the flow.
+  "maker-quote": { perIp: 8, global: 40 },
+  "maker-match": { perIp: 5, global: 30 },
+  "maker-settle": { perIp: 5, global: 30 },
+  "maker-xrpl-account": { perIp: 5, global: 30 },
+  // pay only spends the maker's own throwaway XRPL account (funded via maker-xrpl-account, which
+  // has its own budget), never desk funds — but it still submits real XRPL transactions from this
+  // server's infra, so it gets a budget too rather than being left uncapped.
+  "maker-pay": { perIp: 5, global: 30 },
 };
 
 export type RateLimitResult =

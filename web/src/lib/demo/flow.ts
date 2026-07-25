@@ -36,7 +36,21 @@ export interface DemoClients {
 ///   - takerWallet: deposits FXRP, submits lock() (see the file-level deviation note above),
 ///     receives refund() principal + slashed bond on default.
 ///   - makerWallet: deposits the 1% bond, receives release() proceeds on the happy path.
-export async function setupClients(env: DemoEnv): Promise<DemoClients> {
+export interface SetupClientsOptions {
+  /// Assert that the escrow's teeSigner IS our owner key. Correct for the flows that sign their own
+  /// MatchInstruction (/api/demo/*, /api/wallet/*) — there, a mismatch means every lock() would
+  /// revert, so failing loudly here is right.
+  ///
+  /// Maker mode passes `false`: it settles on the enclave-loop escrow, whose teeSigner is the LIVE
+  /// ENCLAVE, not us. That is the whole point of that path — the instruction is signed inside the
+  /// TEE and we only relay it. Asserting owner == teeSigner there would reject the correct setup.
+  requireOwnerIsTeeSigner?: boolean;
+}
+
+export async function setupClients(
+  env: DemoEnv,
+  { requireOwnerIsTeeSigner = true }: SetupClientsOptions = {}
+): Promise<DemoClients> {
   const provider = new ethers.JsonRpcProvider(env.coston2Rpc, COSTON2_CHAIN_ID);
 
   const ownerWallet = createDemoWallet(env.ownerPrivateKey, provider, "owner/teeSigner");
@@ -46,7 +60,7 @@ export async function setupClients(env: DemoEnv): Promise<DemoClients> {
   const escrow = new ethers.Contract(env.escrowAddress, DVP_ESCROW_ABI, provider);
 
   const teeSigner: string = await escrow.teeSigner();
-  if (teeSigner.toLowerCase() !== ownerWallet.address.toLowerCase()) {
+  if (requireOwnerIsTeeSigner && teeSigner.toLowerCase() !== ownerWallet.address.toLowerCase()) {
     throw new Error(
       `demo/flow.setupClients: escrow.teeSigner() (${teeSigner}) does not match the configured ` +
         `owner key's address (${ownerWallet.address}). The owner key must be the exact key the ` +

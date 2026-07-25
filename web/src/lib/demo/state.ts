@@ -13,7 +13,7 @@
 const RUN_LOCK_TTL_MS = 10 * 60 * 1000;
 
 interface RunLock {
-  path: "happy" | "default";
+  path: "happy" | "default" | "maker";
   matchId?: string;
   startedAt: number;
 }
@@ -22,7 +22,12 @@ let currentRun: RunLock | null = null;
 
 /// Returns true and acquires the lock if no run is in flight (or the previous one is older than
 /// the TTL, treated as abandoned). Returns false if a run is already active.
-export function tryAcquireRunLock(path: "happy" | "default"): boolean {
+///
+/// "maker" (added for maker mode, api/maker/open-rfq) shares this exact same lock with "happy"/
+/// "default" (one-click) and wallet-mode's "happy" — all three touch the same desk keys / escrow
+/// destinationTag counter, so they must never run concurrently, same reasoning as wallet-mode's
+/// prepare route already documents.
+export function tryAcquireRunLock(path: "happy" | "default" | "maker"): boolean {
   const now = Date.now();
   if (currentRun && now - currentRun.startedAt < RUN_LOCK_TTL_MS) {
     return false;

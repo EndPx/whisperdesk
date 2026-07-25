@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PartyCard, BalanceRow, Rail, type PillSpec, type Ring } from "@/components/flow/parts";
 import WalletMode from "@/components/WalletMode";
+import MakerMode from "@/components/MakerMode";
 import { detectProvider } from "@/lib/wallet-client";
 
 /* ---------------------------------------------------------------------------
@@ -144,8 +145,9 @@ export default function DemoConsole() {
   const [makerFxrp, setMakerFxrp] = useState(0);
   const [vaultFxrp, setVaultFxrp] = useState(0);
 
-  const [mode, setMode] = useState<"one-click" | "wallet">("wallet");
+  const [mode, setMode] = useState<"one-click" | "wallet" | "maker">("wallet");
   const [walletBusy, setWalletBusy] = useState(false);
+  const [makerBusy, setMakerBusy] = useState(false);
 
   const [runPath, setRunPath] = useState<"happy" | "default" | null>(null);
   const [busy, setBusy] = useState(false);
@@ -500,7 +502,7 @@ export default function DemoConsole() {
      Render
   ------------------------------------------------------------------------ */
 
-  const switcherDisabled = !!runPath || walletBusy;
+  const switcherDisabled = !!runPath || walletBusy || makerBusy;
 
   const oneClickBody = enabled === null ? (
     <div className="panel mt-6 px-6 py-8 sm:px-8 sm:py-10">
@@ -700,16 +702,37 @@ npm run happy-path`}
         >
           Be the taker (your wallet)
         </button>
+        <button
+          type="button"
+          onClick={() => {
+            userPickedModeRef.current = true;
+            setMode("maker");
+          }}
+          disabled={switcherDisabled}
+          aria-pressed={mode === "maker"}
+          className={`mono-label text-[0.62rem] px-4 py-2 border transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none ${
+            mode === "maker"
+              ? "border-ice/50 text-ice bg-ice/10"
+              : "border-steel-line-2 text-ink-2 hover:text-ink hover:border-ice-deep/60"
+          }`}
+        >
+          Be the maker (your wallet)
+        </button>
       </div>
       <p className="mono-label text-[0.56rem] text-ink-3 mt-3 max-w-[62ch]">
-        Either tab runs a real lock → pay → attest → release settlement on Coston2 + XRPL — one-click
-        spends the desk&apos;s testnet keys, taker mode spends your own.
+        All three run a real lock → pay → attest → release settlement on Coston2 + XRPL — one-click
+        spends the desk&apos;s testnet keys, taker mode spends your own as the counterparty depositing
+        FXRP, and maker mode spends your own as the counterparty quoting blind against a sealed RFQ
+        and paying the XRP leg — the only mode where two independent parties are actually matched
+        inside the enclave.
       </p>
 
       {mode === "one-click" ? (
         oneClickBody
-      ) : (
+      ) : mode === "wallet" ? (
         <WalletMode onSwitchToOneClick={() => setMode("one-click")} onBusyChange={setWalletBusy} />
+      ) : (
+        <MakerMode onSwitchToOneClick={() => setMode("one-click")} onBusyChange={setMakerBusy} />
       )}
     </div>
   );
