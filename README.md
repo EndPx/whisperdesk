@@ -5,11 +5,10 @@ Confidential Compute (FCE) enclave — side, size, and counterparty never leave 
 is delivery-versus-payment (DvP) on Coston2: FXRP is released only against an FDC-proven XRPL
 payment. Built for **Flare Summer Signal** — Bounty 2 (Confidential Compute).
 
-**▶ Live demo: URL coming shortly** — the app is built and verified end to end (a full settlement
-runs in ~4 minutes); the public hostname is being finalised. Two modes: *Be the taker* (your own
-MetaMask, XRP lands on an XRPL address you control) or *One-click* (the desk's testnet keys;
-rate-limited). Live enclave, already public: https://fce.endpx.cloud/info — and every settlement
-receipt below is on-chain and verifiable right now.
+**▶ Try it: https://whisperdesk.endpx.cloud** — runs a real DvP settlement on Coston2 + XRPL Testnet
+in about 3 minutes. Two modes: *Be the taker* (your own MetaMask; the XRP lands on an XRPL address
+you control) or *One-click* (the desk's testnet keys, rate-limited). Live enclave:
+https://fce.endpx.cloud/info
 
 ## What is and isn't real here
 
