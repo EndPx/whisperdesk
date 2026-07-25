@@ -46,7 +46,7 @@ const RECEIPTS: Receipt[] = [
 ];
 
 const STATS = [
-  "100/100 tests green",
+  "117/117 tests green",
   "enclave signer 0x5656…c18B",
   "enclave escrow 0x20A8…7023",
   "FCE extension 0x…010069",

@@ -13,41 +13,41 @@
 //      is rejected and the FDC proof never materialises.
 //
 // Exit 0 = ready (prints the exact command to run), 1 = not ready yet, 2 = could not determine.
+//
+// Check A's pubkey->address derivation and getRandomTeeIds() read are shared with monitor.mjs and
+// healthcheck.mjs via scripts/enclave-loop/lib/enclave.mjs — do not reimplement them here.
 import { ethers } from "ethers";
+import {
+  DEFAULT_FETCH_TIMEOUT_MS,
+  DEFAULT_FLARE_TEE_MANAGER,
+  fetchInfo,
+  extractPublicKey,
+  deriveEnclaveAddress,
+  getRegisteredTeeIds,
+} from "./lib/enclave.mjs";
 
 const RPC = process.env.COSTON2_RPC ?? "https://coston2-api.flare.network/ext/C/rpc";
 const EXT_PROXY = process.env.EXT_PROXY_URL ?? "https://fce.endpx.cloud";
-const DIAMOND = "0x1a9C4A0f9D76c0b1D91d22E24E573a9b377618aE"; // FlareTeeManager
+const DIAMOND = DEFAULT_FLARE_TEE_MANAGER; // FlareTeeManager
 const FSM = "0xA90Db6D10F856799b10ef2A77EBCbF460aC71e52"; // FlareSystemsManager
 const EXT_ID = 65641n;
 
 const provider = new ethers.JsonRpcProvider(RPC, 114);
 
-let info;
+let body;
 try {
-  const res = await fetch(`${EXT_PROXY}/info`, { signal: AbortSignal.timeout(20_000) });
-  if (!res.ok) throw new Error(`/info returned ${res.status}`);
-  info = (await res.json()).teeInfo;
+  body = await fetchInfo(EXT_PROXY, DEFAULT_FETCH_TIMEOUT_MS);
 } catch (err) {
   console.error(`DOWN: cannot reach ${EXT_PROXY}/info — ${err.message}`);
   process.exit(2);
 }
+const info = body.teeInfo;
 
 // --- A. is the running enclave the machine that is registered? --------------------------------
-const pub = info.publicKey;
-const liveTeeId = ethers.computeAddress("0x04" + pub.x.slice(2) + pub.y.slice(2));
+const { x, y } = extractPublicKey(body);
+const liveTeeId = deriveEnclaveAddress(x, y);
 
-const registry = new ethers.Contract(
-  DIAMOND,
-  ["function getRandomTeeIds(uint256,uint256) view returns (address[])"],
-  provider
-);
-let registered = [];
-try {
-  registered = await registry.getRandomTeeIds(EXT_ID, 1n);
-} catch {
-  // an extension with no usable machine can revert here — treat as "none registered"
-}
+const registered = await getRegisteredTeeIds({ teeManagerAddress: DIAMOND, extId: EXT_ID, rpcUrl: RPC });
 const machineOk = registered.some((a) => a.toLowerCase() === liveTeeId.toLowerCase());
 
 console.log("A. TEE machine registration");

@@ -222,35 +222,54 @@ contract — rolling it back just means going back to pointing the demo at the o
 
 ## Monitoring
 
-Because of §0.1 (the enclave's identity key regenerates in memory on every `extension-tee` restart,
-with no persistence), a silent VPS reboot between now and judging rotates the live TEE signer address
-without any visible symptom — `/info` still returns 200, the site still loads, but every `lock()` with
-an enclave signature reverts (`DvPEscrow.teeSigner` no longer matches). `scripts/enclave-loop/healthcheck.mjs`
-catches this by comparing the enclave's `/info`-derived address against `escrow.teeSigner()` on-chain.
+There are **two independent, verified ways** the enclave loop can silently break, and both need to be
+watched — one is not a superset of the other:
+
+1. **teeSigner identity drift** (§0.1: the enclave's identity key regenerates in memory on every
+   `extension-tee` restart, with no persistence). A silent VPS reboot between now and judging rotates
+   the live TEE signer address without any visible symptom — `/info` still returns 200, the site still
+   loads, but every `lock()` with an enclave signature reverts (`DvPEscrow.teeSigner` no longer
+   matches).
+2. **TEE machine registration drift** — the machine registered on-chain for our extension
+   (`getRandomTeeIds`) can point at a dead machine after a rebuild, silently dropping every
+   ONCHAIN-routed instruction. `/direct` is unaffected and `/info` stays HTTP 200 throughout, so
+   nothing else notices either. This is exactly what happened on 25 Jul.
+
+`scripts/enclave-loop/monitor.mjs` runs **both** checks in one process (reusing the shared derivation
+/ fetch / on-chain-read logic in `scripts/enclave-loop/lib/enclave.mjs`, also used by
+`healthcheck.mjs` and `onchain-ingress-readiness.mjs` individually) — install `monitor.mjs` on cron,
+not `healthcheck.mjs` alone, or the machine-registration failure mode goes unwatched again.
 
 **Install this on the VPS** (not done by this checklist — a human runs it), every 15 minutes:
 
 ```cron
-*/15 * * * * cd /root/whisperdesk/enclave-loop && /usr/bin/node healthcheck.mjs >> /var/log/whisperdesk-healthcheck.log 2>&1 || echo "WhisperDesk healthcheck exit=$? at $(date -u)" >> /var/log/whisperdesk-healthcheck-alerts.log
+*/15 * * * * cd /root/whisperdesk-web && /usr/bin/node scripts/enclave-loop/monitor.mjs >> /var/log/whisperdesk-healthcheck.log 2>&1 || echo "WhisperDesk monitor exit=$? at $(date -u)" >> /var/log/whisperdesk-healthcheck-alerts.log
 ```
 
-Adjust the `cd` path to wherever `scripts/enclave-loop/` lives on the VPS, and point `node` at the
-right binary if it's not on cron's default `PATH`. `healthcheck.mjs` needs no flags to run the real
-check — it defaults `EXT_PROXY_URL`/`ESCROW_ADDRESS`/`COSTON2_RPC` to the live judge-facing values,
-override via env if you're pointing it at a different escrow.
+Adjust the `cd` path to wherever the repo actually lives on the VPS (the cron runs from
+`/root/whisperdesk-web`, not `/root/whisperdesk/enclave-loop` — a previous version of this doc had
+the wrong path), and point `node` at the right binary if it's not on cron's default `PATH`.
+`monitor.mjs` needs no flags to run the real check — it defaults `EXT_PROXY_URL`/`ESCROW_ADDRESS`/
+`COSTON2_RPC`/`FLARE_TEE_MANAGER`/`EXT_ID` to the live judge-facing values, override via env if
+you're pointing it at a different deployment.
 
-**Exit codes** (see the header comment in `healthcheck.mjs` for the authoritative version):
+**Exit codes** (see the header comment in `monitor.mjs` for the authoritative version):
 
 | Exit | Meaning | Action |
 |---|---|---|
-| `0` | OK — enclave `/info`-derived address matches `escrow.teeSigner()` | none |
-| `1` | DRIFT — both reachable, addresses don't match (key rotated, escrow stale) | run §5's `setTeeSigner` rebind now, using the NEW address the script prints |
-| `2` | DOWN — `/info` unreachable, non-200, malformed, or the RPC/escrow read failed | enclave or RPC is broken — check `docker compose ps`/logs on the VPS before assuming a key rotation |
+| `0` | OK — both checks pass (one `OK <check>: ...` line per check, quiet otherwise) | none |
+| `1` | DRIFT — enclave reachable, but at least one check failed | stderr names exactly which check(s) drifted and prints the exact fix command: `setTeeSigner` for the teeSigner check, pause the stale machine + `post-build.sh` for the machine-registration check |
+| `2` | DOWN — `/info` unreachable, non-200, malformed, or an RPC/contract read failed | enclave or RPC is broken — check `docker compose ps`/logs on the VPS before assuming a drift |
 | `3` | (only via `--selftest`) offline derivation math itself is broken | should never fire from the cron line above; means `ethers` or the script changed, not a deployment issue |
 
-Exit `1` is the one that matters most before judging: it means the demo will fail on the very first
-`lock()` a judge tries, even though the site looks fully up. Treat any `1` in the alert log as
-same-day, not "next time someone's on the VPS."
+Exit `1` is the one that matters most before judging: either failure mode means the demo will fail on
+the very first `lock()` or the very first ONCHAIN-routed RFQ a judge tries, even though the site looks
+fully up. Treat any `1` in the alert log as same-day, not "next time someone's on the VPS."
+
+`healthcheck.mjs` (teeSigner check only) and `onchain-ingress-readiness.mjs` (machine registration +
+signing-policy check, with more diagnostic detail) still exist standalone with the same CLI and exit
+codes as before, for manual runs and because they're referenced directly elsewhere in this doc — but
+the cron should run `monitor.mjs`, not `healthcheck.mjs` alone, so neither blind spot goes unwatched.
 
 ## Onchain RFQ ingress (submitRfq)
 

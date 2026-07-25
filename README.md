@@ -26,6 +26,15 @@ This is a hackathon prototype, and these are its scope boundaries, not apologies
   still uses `POST /direct` (API-keyed, `WD_ALLOW_DIRECT_RFQ=true`), where the taker is
   self-attested, because it has to finish inside a browser session rather than wait on the auction
   window plus two extra onchain transactions.
+- **Every trade you can run here is 1 FXRP, not an institutional block.** `docs/design.md`'s
+  canonical policy is a 5,000 FXRP minimum block (`MIN_BLOCK_FXRP`); the deployed integration
+  instance (`contracts/script/DeployIntegration.s.sol`) sets it to `1e6` (1 FXRP) instead, because a
+  5,000-FXRP block needs ~5,000 XRP of counter-payment on the XRPL leg, and a faucet-funded XRPL
+  testnet account cannot move that. Every receipt in this README is a 1-FXRP trade under that
+  testnet-only override.
+- **The one-click demo is rate-limited** (3 runs per visitor per day, 20 globally) **and runs on
+  desk-held testnet keys** — it is not "be the taker" with your own funds; that mode is separate
+  (above).
 
 ## What it does
 
@@ -50,9 +59,10 @@ not hidden. See `docs/fce-runbook.md`.
 |---|---|
 | FCE `/info` (signed `TeeInfo`) | https://fce.endpx.cloud/info |
 | FCE extension ID | `0x…010069` (65641) |
-| WhisperDeskInstructionSender | `0x6C2CA15B0c9459a71807e6Fb134874609E9c8790` |
-| Live TEE signer | `0x1832e33F99cF5628f6Dc7Ae34e6011995BFdE4BD` |
-| DvPEscrow (integration instance) | `0x5f32783D629E2acBb83f16628ad76D02A26CFB9B` |
+| WhisperDeskInstructionSender | `0x56A903F408C4745D34354Ec230BbfBDD78eC6426` |
+| Live TEE signer | `0x56564F61588bB110E0712c3938aDa4338e6cc18B` |
+| DvPEscrow — **public one-click demo** | `0x5f32783D629E2acBb83f16628ad76D02A26CFB9B` |
+| DvPEscrow — **enclave loop** (`teeSigner` = the live enclave) | `0x20A885cb6ed3F652C5Fcb6a683CE74436F6a7023` |
 | MockFXRP (mintable, 6 dec) | `0x700bfC3620585eb42F1Dda6aBA3Ac8E793859FBE` |
 | BondLedger | `0xC2f2F46A126E542E8178e2cc8fdC13aF3A48E156` |
 | FtsoV2 (real Coston2 registry) | `0xC4e9c78EA53db782E28f28Fdf80BaF59336B304d` |
@@ -123,10 +133,17 @@ quote over `/direct` (quotes are private maker data and never touch the chain):
 | XRPL payment | https://testnet.xrpl.org/transactions/D0F1D1F4BD9A4EA202341847BE9ECF5236C08249696DA45D2BEC384C014AA4D9 |
 | `release()` — maker received 1.0 FXRP | https://coston2-explorer.flare.network/tx/0xcd660e692e9445f458ca99f285b2d405ffe702585bb4c5d90125c0b4c2811573 |
 
-Reproduce with `scripts/enclave-loop/onchain-loop.mjs` (RFQ → quote → match, prices taken from the
-live FTSOv2 mid so the run doesn't go stale) followed by `run.mjs` (lock → pay → prove → release).
-`onchain-ingress-readiness.mjs` checks the two preconditions first: the registered TEE machine must
-be the one actually running, and the enclave's signing policy must match the on-chain reward epoch.
+This is the operator's reproduction path: `scripts/enclave-loop/onchain-loop.mjs` (RFQ → quote →
+match, prices taken from the live FTSOv2 mid so the run doesn't go stale) followed by `run.mjs`
+(lock → pay → prove → release) run on the VPS beside a prebuilt `wd-client` binary and require
+`DIRECT_API_KEY`, which per `docs/enclave-deploy-checklist.md` is generated and held by the
+operator only — never shared, never committed. `onchain-ingress-readiness.mjs` checks the two
+preconditions first: the registered TEE machine must be the one actually running, and the
+enclave's signing policy must match the on-chain reward epoch.
+
+What you *can* verify independently, without those keys: `node scripts/enclave-loop/verify-onchain-rfq.mjs`
+(reads Coston2 directly and checks the registry/instruction binding live), `cd contracts && forge test`
+(the full 117/117 suite), and the explorer receipts linked throughout this README.
 
 Honest scope note: for this demo the RFQ enters over `POST /direct` behind an API key with
 `WD_ALLOW_DIRECT_RFQ=true`, so the taker identity in the envelope is self-attested rather than
@@ -144,13 +161,13 @@ on every restart by design (see `docs/enclave-deploy-checklist.md`).
    ```
    Returns a signed `TeeInfo` (pubkey, codeHash, platform, teeID).
 
-2. **Run the contract test suite** (100/100 passing, verified locally):
+2. **Run the contract test suite** (117/117 passing, verified locally):
    ```bash
    cd contracts && forge test --summary
    ```
    `BondLedgerTest` (17), `DvPEscrowTest` (66), `ForkFdcReleaseTest` (3), `ForkFtsoBandTest` (4),
-   `GoldenVectorsTest` (4), `InvariantsTest` (4, fuzz/invariant), `MatcherToLockTest` (2) — 100
-   passed, 0 failed.
+   `GoldenVectorsTest` (4), `InvariantsTest` (4, fuzz/invariant), `MatcherToLockTest` (2),
+   `WhisperDeskInstructionSenderTest` (17) — 117 passed, 0 failed.
 
 3. **Optional: Go↔Solidity ABI parity + TEE signing smoke test:**
    ```bash
@@ -222,7 +239,7 @@ and worst-case analysis: `docs/design.md` §2 (Trust Boundaries).
 
 | Path | Contents |
 |---|---|
-| `contracts/` | Foundry project — `DvPEscrow.sol`, `BondLedger.sol`, `WhisperDeskInstructionSender.sol`, `MatchInstructionLib`, mocks, 100 tests |
+| `contracts/` | Foundry project — `DvPEscrow.sol`, `BondLedger.sol`, `WhisperDeskInstructionSender.sol`, `MatchInstructionLib`, mocks, 117 tests |
 | `extension/matcher/` | Go sealed order book, deterministic matcher, golden vectors (ABI parity with Solidity) |
 | `extension/smoketest/` | TEE-side signing smoke test (`ecrecover` compatibility check) |
 | `scripts/e2e/` | Live DvP end-to-end runners (`happy-path.mjs`, `default-path.mjs`) against a deployed integration instance |

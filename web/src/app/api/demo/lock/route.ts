@@ -16,9 +16,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ enabled: false }, { status: 503 });
   }
 
-  // Abuse guard — see ratelimit.ts. This is the one-click run's entry point and the only place
-  // that spends the DESK's own testnet keys unauthenticated; the other one-click routes below it
-  // (pay/attest/proof/release/refund) are continuations of an already-authorised run, and
+  // Abuse guard — see ratelimit.ts. This is the one-click run's entry point; it, plus
+  // /api/demo/attest and /api/demo/pay (each with their own "demo-attest"/"demo-pay" budget),
+  // are the routes that spend the DESK's own testnet keys unauthenticated. proof/release/refund
+  // only read state or act on a matchId a rate-limited lock() already produced, and
   // /api/wallet/* spends the JUDGE's own funds so it stays unlimited (aside from its own faucet
   // limiter).
   const ip = clientIpFromHeaders(request.headers);

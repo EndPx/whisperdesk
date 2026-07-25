@@ -647,26 +647,33 @@ export default function WalletMode({
         <h3 className="font-display font-semibold text-[1.3rem] text-ink mb-3">No wallet detected.</h3>
         <p className="max-w-[54ch] text-[0.95rem] leading-[1.65] text-ink-2 mb-6">
           This mode needs a browser wallet — you&apos;ll sign your own approve, deposit, and lock
-          transactions on Coston2, and the settlement pays out to an XRPL address you control.
+          transactions on Coston2, and the settlement pays out to an XRPL address you control. No
+          wallet in this browser? A real settlement is still one click away.
         </p>
-        <div className="flex flex-wrap items-center gap-5">
+        <div className="flex flex-col gap-4">
+          {onSwitchToOneClick && (
+            <div>
+              <button
+                type="button"
+                onClick={onSwitchToOneClick}
+                className="mono-label text-[0.68rem] px-5 py-2.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300"
+              >
+                Run the one-click demo — settles now
+              </button>
+              <p className="mono-label text-[0.56rem] text-ink-3 mt-2 max-w-[46ch] leading-relaxed">
+                Runs the same lock → pay → attest → release flow on the desk&apos;s own testnet
+                keys, not yours — limited to a few runs a day.
+              </p>
+            </div>
+          )}
           <a
             href="https://metamask.io/download/"
             target="_blank"
             rel="noopener noreferrer"
-            className="mono-label text-[0.68rem] px-5 py-2.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300"
+            className="mono-label text-[0.62rem] text-ink-3 hover:text-ink underline underline-offset-4 w-fit"
           >
-            Install MetaMask
+            or install MetaMask to run this mode with your own wallet
           </a>
-          {onSwitchToOneClick && (
-            <button
-              type="button"
-              onClick={onSwitchToOneClick}
-              className="mono-label text-[0.66rem] text-ink-3 hover:text-ink underline underline-offset-4"
-            >
-              or use the one-click demo
-            </button>
-          )}
         </div>
       </div>
     );

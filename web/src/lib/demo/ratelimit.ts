@@ -14,15 +14,23 @@
 //     purely so the desk doesn't get drained / the demo doesn't go quiet during judging.
 const WINDOW_MS = 24 * 60 * 60 * 1000;
 
-export type RateLimitKind = "demo-lock";
+export type RateLimitKind = "demo-lock" | "demo-attest" | "demo-pay";
 
 interface Limits {
   perIp: number;
   global: number;
 }
 
+// Distinct kind per route so one route's budget can't starve another (e.g. a burst of
+// lock() calls exhausting global headroom shouldn't also block attest()/pay() for a run
+// that's already past lock()). A legitimate one-click run consumes exactly one unit of
+// each kind, so these are sized well above one but far below what a drain loop needs to
+// do real damage: demo-attest spends real Coston2 gas + an FDC request fee from the owner
+// key; demo-pay sends real testnet XRP from the maker seed.
 const LIMITS: Record<RateLimitKind, Limits> = {
   "demo-lock": { perIp: 3, global: 20 },
+  "demo-attest": { perIp: 5, global: 30 },
+  "demo-pay": { perIp: 5, global: 30 },
 };
 
 export type RateLimitResult =

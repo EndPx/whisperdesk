@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PartyCard, BalanceRow, Rail, type PillSpec, type Ring } from "@/components/flow/parts";
 import WalletMode from "@/components/WalletMode";
+import { detectProvider } from "@/lib/wallet-client";
 
 /* ---------------------------------------------------------------------------
    DemoConsole — the live judge-facing console at /demo.
@@ -152,11 +153,28 @@ export default function DemoConsole() {
 
   const mountedRef = useRef(true);
   const logIdRef = useRef(0);
+  const userPickedModeRef = useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+    };
+  }, []);
+
+  // Wallet-aware default: the server can't know whether a browser wallet is present, so we render
+  // the stable "wallet" tab first (matches server + first client paint — no hydration mismatch),
+  // then flip to the one-click tab post-mount if detection comes back empty. Reuses the same
+  // detectProvider() signal WalletMode.tsx uses for its own no-wallet fallback. If the judge has
+  // already clicked a tab by the time detection resolves, their choice wins.
+  useEffect(() => {
+    let cancelled = false;
+    Promise.resolve().then(() => {
+      if (cancelled || userPickedModeRef.current) return;
+      if (!detectProvider()) setMode("one-click");
+    });
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -634,7 +652,10 @@ npm run happy-path`}
       <div className="flex items-center gap-2">
         <button
           type="button"
-          onClick={() => setMode("one-click")}
+          onClick={() => {
+            userPickedModeRef.current = true;
+            setMode("one-click");
+          }}
           disabled={switcherDisabled}
           aria-pressed={mode === "one-click"}
           className={`mono-label text-[0.62rem] px-4 py-2 border transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none ${
@@ -643,11 +664,14 @@ npm run happy-path`}
               : "border-steel-line-2 text-ink-2 hover:text-ink hover:border-ice-deep/60"
           }`}
         >
-          One-click (desk wallet)
+          One-click (desk wallet) — settles now
         </button>
         <button
           type="button"
-          onClick={() => setMode("wallet")}
+          onClick={() => {
+            userPickedModeRef.current = true;
+            setMode("wallet");
+          }}
           disabled={switcherDisabled}
           aria-pressed={mode === "wallet"}
           className={`mono-label text-[0.62rem] px-4 py-2 border transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none ${
@@ -659,6 +683,10 @@ npm run happy-path`}
           Be the taker (your wallet)
         </button>
       </div>
+      <p className="mono-label text-[0.56rem] text-ink-3 mt-3 max-w-[62ch]">
+        Either tab runs a real lock → pay → attest → release settlement on Coston2 + XRPL — one-click
+        spends the desk&apos;s testnet keys, taker mode spends your own.
+      </p>
 
       {mode === "one-click" ? (
         oneClickBody

@@ -17,6 +17,12 @@ The WhisperDesk FCE extension is **registered and running live on Coston2**, hos
 | Public ext-proxy | `https://fce.endpx.cloud/info` (200) |
 | Attestation | `magic_pass` (simulated-TEE; MODE=1) |
 
+**Superseded (historical record only — this table documents the Step-3 bring-up, not current
+state):** the registered instruction sender is now `0x56A903F408C4745D34354Ec230BbfBDD78eC6426` and
+the live TEE signer is `0x56564F61588bB110E0712c3938aDa4338e6cc18B` (post the Step-5c onchain-ingress
+swap and the enclave rebuild — see `.claude/context/deployments.md`, "Step 5c" and "Onchain ingress:
+FIXED" sections).
+
 `DvPEscrow.setTeeSigner` points our escrow (`0xf8A5…601e`) at the live TEE address, so the escrow's
 `lock()` accepts signatures produced by the running enclave. The generic FCE loop is proven
 end-to-end (`test.sh`: SAY_HELLO/SAY_GOODBYE instruction round-trip through the chain relay). See

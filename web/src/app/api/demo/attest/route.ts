@@ -8,6 +8,7 @@ import { COSTON2_CHAIN_ID } from "@/lib/demo/config";
 import { createDemoWallet, getDemoEnv } from "@/lib/demo/env";
 import { submitAttestationRequest } from "@/lib/demo/fdc";
 import { errMessage } from "@/lib/demo/http";
+import { checkAndConsume, clientIpFromHeaders } from "@/lib/demo/ratelimit";
 
 export const runtime = "nodejs";
 
@@ -15,6 +16,23 @@ export async function POST(request: Request) {
   const env = getDemoEnv();
   if (!env) {
     return NextResponse.json({ enabled: false }, { status: 503 });
+  }
+
+  // Abuse guard — see ratelimit.ts. This is unauthenticated and pays real Coston2 gas +
+  // an FDC request fee from the owner/teeSigner key, so it needs its own budget distinct
+  // from lock's — a garbage-xrplTx loop here can't be left unmetered just because lock()
+  // already ran once.
+  const ip = clientIpFromHeaders(request.headers);
+  const limit = checkAndConsume("demo-attest", ip);
+  if (!limit.ok) {
+    const scopeMsg =
+      limit.scope === "ip"
+        ? "You've hit the per-visitor limit for the shared one-click demo today."
+        : "The shared one-click demo has hit its daily limit across all visitors.";
+    return NextResponse.json(
+      { error: `${scopeMsg} Try again later, or use "Be the taker" to run it with your own wallet.`, retryAfterSeconds: limit.retryAfterSeconds },
+      { status: 429 },
+    );
   }
 
   let xrplTx: string;

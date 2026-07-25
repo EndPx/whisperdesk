@@ -13,6 +13,14 @@
 // Nobody would notice until a judge tried the live demo. This script is the difference between
 // finding that out in a 15-minute cron vs. finding it out live in front of a judge.
 //
+// NOTE: this is ONE of two independent ways the enclave loop can silently break — the other is the
+// registered TEE *machine* going stale (getRandomTeeIds routes onchain instructions to a dead
+// machine; see onchain-ingress-readiness.mjs). This script only covers the teeSigner identity
+// check. `monitor.mjs` in this same directory runs BOTH checks and is what the cron should install
+// going forward — see docs/enclave-deploy-checklist.md "Monitoring". This script is kept standalone
+// (same CLI, same exit codes) because it's still referenced directly from docs and may still be
+// wired into cron on older deployments.
+//
 // Usage:
 //   node healthcheck.mjs                 run the real check against EXT_PROXY_URL / ESCROW_ADDRESS
 //   node healthcheck.mjs --selftest      offline only: verify the pubkey->address derivation
@@ -33,55 +41,33 @@
 //                itself failed (means ethers or this script's math broke, not a deployment issue)
 //
 // Deliberately dependency-light: pure node (global fetch, Node >=18) + ethers (already a dep of
-// this package — see package.json). No new deps, no build step.
+// this package — see package.json) + scripts/enclave-loop/lib/enclave.mjs (the shared derivation /
+// fetch / on-chain read logic — also used by monitor.mjs and onchain-ingress-readiness.mjs). No new
+// deps, no build step.
 
-import { ethers } from "ethers";
+import {
+  DEFAULT_EXT_PROXY_URL,
+  DEFAULT_ESCROW_ADDRESS,
+  DEFAULT_COSTON2_RPC,
+  DEFAULT_FETCH_TIMEOUT_MS,
+  fetchInfo,
+  extractPublicKey,
+  deriveEnclaveAddress,
+  getEscrowTeeSigner,
+  selftestDeriveEnclaveAddress,
+} from "./lib/enclave.mjs";
 
-const EXT_PROXY_URL = (process.env.EXT_PROXY_URL || "https://fce.endpx.cloud").replace(/\/+$/, "");
-const ESCROW_ADDRESS = process.env.ESCROW_ADDRESS || "0x20A885cb6ed3F652C5Fcb6a683CE74436F6a7023";
-const COSTON2_RPC = process.env.COSTON2_RPC || "https://coston2-api.flare.network/ext/C/rpc";
-const COSTON2_CHAIN_ID = 114;
-const FETCH_TIMEOUT_MS = 15_000;
-
-const DVP_ESCROW_ABI = ["function teeSigner() view returns (address)"];
-
-// Known-good self-test vector — the live enclave signer from the Step-5 enclave-loop receipts
-// (.claude/context/deployments.md, "enclave signer (verified by local ecrecover)"). Pinned here so
-// `--selftest` can catch a broken derivation completely offline, without the live enclave being up.
-const SELFTEST_X = "0x6fb495068b728329a5f8ad83cfd47ea04a812b6271799b8b06054b564f510e75";
-const SELFTEST_Y = "0x9f837f467e20e9257a229903f4f99479c521b97b25b37cd0930f05a698c75f35";
-const SELFTEST_EXPECTED_ADDRESS = "0x56564F61588bB110E0712c3938aDa4338e6cc18B";
-
-/// Derives the enclave's Ethereum address from the raw secp256k1 X/Y coordinates GET /info returns
-/// at teeInfo.publicKey.{x,y} — exactly what tee-node's ParsePubKey + go-ethereum's
-/// crypto.PubkeyToAddress do server-side (scripts/enclave-loop/internal/teeclient/teeclient.go:48:
-/// "address = crypto.PubkeyToAddress(ParsePubKey(teeInfo.publicKey)) = address(keccak256(X||Y)[12:])").
-/// Builds the 65-byte uncompressed EC point (0x04 || X || Y) and lets ethers do the same
-/// keccak256(X||Y)[12:] derivation via computeAddress — no reimplementation of the hash math here.
-function deriveEnclaveAddress(xHex, yHex) {
-  const x = ethers.getBytes(xHex);
-  const y = ethers.getBytes(yHex);
-  if (x.length !== 32 || y.length !== 32) {
-    throw new Error(
-      `healthcheck: expected 32-byte X/Y coordinates, got X=${x.length}B Y=${y.length}B (malformed /info response)`
-    );
-  }
-  const uncompressed = ethers.concat(["0x04", x, y]);
-  return ethers.computeAddress(uncompressed);
-}
+const EXT_PROXY_URL = (process.env.EXT_PROXY_URL || DEFAULT_EXT_PROXY_URL).replace(/\/+$/, "");
+const ESCROW_ADDRESS = process.env.ESCROW_ADDRESS || DEFAULT_ESCROW_ADDRESS;
+const COSTON2_RPC = process.env.COSTON2_RPC || DEFAULT_COSTON2_RPC;
+const FETCH_TIMEOUT_MS = DEFAULT_FETCH_TIMEOUT_MS;
 
 function runSelftest() {
-  let derived;
-  try {
-    derived = deriveEnclaveAddress(SELFTEST_X, SELFTEST_Y);
-  } catch (err) {
-    console.error(`SELFTEST FAIL: derivation threw: ${err.message}`);
-    process.exit(3);
-  }
-  if (derived.toLowerCase() !== SELFTEST_EXPECTED_ADDRESS.toLowerCase()) {
+  const { pass, derived, expected, error } = selftestDeriveEnclaveAddress();
+  if (!pass) {
     console.error(
       `SELFTEST FAIL: pubkey->address derivation broken. ` +
-        `derived=${derived} expected=${SELFTEST_EXPECTED_ADDRESS}. ` +
+        `derived=${derived ?? `(threw: ${error?.message ?? "unknown error"})`} expected=${expected}. ` +
         `ethers version or the X||Y->address math changed — do not trust this script's real-run ` +
         `output until this passes again.`
     );
@@ -89,27 +75,6 @@ function runSelftest() {
   }
   console.log(`SELFTEST OK: pubkey->address derivation verified (${derived}).`);
   process.exit(0);
-}
-
-async function fetchInfo(url, timeoutMs) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(`${url}/info`, { signal: controller.signal });
-    const bodyText = await res.text();
-    if (!res.ok) {
-      throw new Error(`GET /info returned HTTP ${res.status}: ${bodyText.slice(0, 300)}`);
-    }
-    let body;
-    try {
-      body = JSON.parse(bodyText);
-    } catch (err) {
-      throw new Error(`GET /info returned non-JSON body: ${err.message}`);
-    }
-    return body;
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 async function main() {
@@ -128,13 +93,11 @@ async function main() {
     process.exit(2);
   }
 
-  const x = info?.teeInfo?.publicKey?.x;
-  const y = info?.teeInfo?.publicKey?.y;
-  if (!x || !y) {
-    console.error(
-      `DOWN: /info responded but teeInfo.publicKey.{x,y} is missing/malformed. ` +
-        `Got teeInfo.publicKey=${JSON.stringify(info?.teeInfo?.publicKey)}`
-    );
+  let x, y;
+  try {
+    ({ x, y } = extractPublicKey(info));
+  } catch (err) {
+    console.error(`DOWN: /info responded but ${err.message}`);
     process.exit(2);
   }
 
@@ -149,9 +112,7 @@ async function main() {
   // 2. Escrow's on-chain teeSigner.
   let teeSigner;
   try {
-    const provider = new ethers.JsonRpcProvider(COSTON2_RPC, COSTON2_CHAIN_ID);
-    const escrow = new ethers.Contract(ESCROW_ADDRESS, DVP_ESCROW_ABI, provider);
-    teeSigner = await escrow.teeSigner();
+    teeSigner = await getEscrowTeeSigner({ escrowAddress: ESCROW_ADDRESS, rpcUrl: COSTON2_RPC });
   } catch (err) {
     console.error(
       `DOWN: enclave /info was reachable (derived ${enclaveAddress}), but reading ` +
