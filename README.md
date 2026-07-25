@@ -19,8 +19,12 @@ This is a hackathon prototype, and these are its scope boundaries, not apologies
 - **FXRP is a MockFXRP test token** (mintable, unbacked), not FAssets-minted FXRP. The DvP/settlement
   machinery around it — escrow, FDC proof check, price band, bond slashing — is real; the asset is a
   stand-in.
-- **The enclave runs in simulated-TEE mode** (attestation `magic_pass`, `SIMULATED_TEE=true`). Its
-  identity key regenerates on every restart by design — there is no persistent enclave identity yet.
+- **The enclave runs in simulated-TEE mode** (attestation `magic_pass`, `SIMULATED_TEE=true`) — the
+  path Flare states is eligible for judging; GCP Confidential Space is not required. We still did the
+  full onchain registration on top of it: our own extension (`65641`), a TEE machine registered and
+  at `PRODUCTION` status, and our own registry-enforced instruction sender. What simulated mode does
+  cost us is a hardware attestation and a persistent identity — the enclave's key regenerates on
+  every restart by design, which is why `scripts/enclave-loop/monitor.mjs` watches for exactly that.
 - **Two RFQ ingresses exist, and both work.** The onchain one is the real design:
   `WhisperDeskInstructionSender.submitRfq` is the registry-enforced instruction sender for our
   extension and stamps the taker from `msg.sender`, so the identity cannot be forged — a full
@@ -73,9 +77,15 @@ move a token. That split is the whole design.
 
 ## Live right now
 
-The FCE extension is registered and running on Coston2, hosted at `https://fce.endpx.cloud`. This
-is **simulated-TEE** (attestation `magic_pass`, `SIMULATED_TEE=true` / `MODE=1`) — stated honestly,
-not hidden. See `docs/fce-runbook.md`.
+The FCE extension is registered and running on Coston2, hosted at `https://fce.endpx.cloud` —
+our own extension id, our own TEE machine at `PRODUCTION` status, and our own instruction sender
+that the TEE registry enforces as the only valid origin for our instructions. It runs in
+**simulated-TEE** mode (`magic_pass`, `SIMULATED_TEE=true` / `MODE=1`), which Flare states is
+eligible for judging. See `docs/fce-runbook.md` and `docs/enclave-deploy-checklist.md`.
+
+Check it yourself: `node scripts/enclave-loop/monitor.mjs` reads the live enclave and Coston2 and
+asserts all four — the escrow trusts the running enclave's key, the registry routes instructions to
+it, its machine status is `PRODUCTION`, and the URL registered onchain is the one actually serving.
 
 | Component | Address / URL |
 |---|---|
