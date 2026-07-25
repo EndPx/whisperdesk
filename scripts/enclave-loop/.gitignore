@@ -4,3 +4,6 @@ wd-client.exe
 # run artifacts (contain a specific run's rfqId / signature)
 match.json
 quote-signed.json
+match-onchain.json
+quote-onchain.json
+rfq-live.json
