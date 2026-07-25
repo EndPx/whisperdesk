@@ -24,7 +24,15 @@ export const DEFAULT_EXT_ID = 65641n; // WhisperDesk fce-extension id
 export const DVP_ESCROW_ABI = ["function teeSigner() view returns (address)"];
 export const FLARE_TEE_MANAGER_ABI = [
   "function getRandomTeeIds(uint256,uint256) view returns (address[])",
+  "function getTeeMachineStatus(address) view returns (uint8)",
+  "function getTeeMachine(address) view returns (tuple(address teeId, address owner, string url))",
 ];
+
+/// FlareTeeManager's machine lifecycle enum, per the Flare team's Coston2 FCC guidance:
+/// only PRODUCTION machines are handed onchain instructions. A machine that boots but never
+/// completes the availability check sits at INITIALIZED and is silently skipped.
+export const TEE_MACHINE_STATUS = { 0: "UNREGISTERED", 1: "INITIALIZED", 2: "PRODUCTION" };
+export const TEE_STATUS_PRODUCTION = 2;
 
 // ---- selftest vector -----------------------------------------------------------------------------
 // Pinned known-good X/Y -> address triple — the live enclave signer from the Step-5 enclave-loop
@@ -112,6 +120,36 @@ export async function getEscrowTeeSigner({
   const provider = new ethers.JsonRpcProvider(rpcUrl, COSTON2_CHAIN_ID);
   const escrow = new ethers.Contract(escrowAddress, DVP_ESCROW_ABI, provider);
   return escrow.teeSigner();
+}
+
+/// Reads FlareTeeManager.getTeeMachineStatus(teeId) and getTeeMachine(teeId) on Coston2.
+///
+/// Status is the most direct signal that the enclave is actually eligible for onchain instructions:
+/// 2 = PRODUCTION (eligible), 1 = INITIALIZED (registered but never passed the availability check —
+/// the state machines get stuck in when their registered URL is dead), 0 = UNREGISTERED.
+///
+/// The URL matters too: data providers PUSH to whatever hostname is stored onchain, so if the
+/// registered URL drifts from what we actually serve, instructions stop arriving even though the
+/// machine looks registered and /info answers fine.
+export async function getTeeMachineState({
+  teeId,
+  teeManagerAddress = DEFAULT_FLARE_TEE_MANAGER,
+  rpcUrl = DEFAULT_COSTON2_RPC,
+} = {}) {
+  const provider = new ethers.JsonRpcProvider(rpcUrl, COSTON2_CHAIN_ID);
+  const registry = new ethers.Contract(teeManagerAddress, FLARE_TEE_MANAGER_ABI, provider);
+  const [status, machine] = await Promise.all([
+    registry.getTeeMachineStatus(teeId),
+    registry.getTeeMachine(teeId),
+  ]);
+  const code = Number(status);
+  return {
+    status: code,
+    statusName: TEE_MACHINE_STATUS[code] ?? `UNKNOWN(${code})`,
+    isProduction: code === TEE_STATUS_PRODUCTION,
+    url: machine.url,
+    owner: machine.owner,
+  };
 }
 
 /// Reads FlareTeeManager.getRandomTeeIds(extId, 1) on Coston2 — the machine(s) currently routed
