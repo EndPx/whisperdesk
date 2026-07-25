@@ -167,13 +167,19 @@ export function Rail({ pill, dashed = false }: { pill: PillSpec; dashed?: boolea
    Party cards
 --------------------------------------------------------------------------- */
 
-export function BalanceRow({ token, value }: { token: "FXRP" | "XRP"; value: number }) {
+// `value: null` renders a neutral placeholder dash instead of a number — for a figure that hasn't
+// resolved yet (e.g. a cross-chain read still in flight), never guess or hold onto a stale number.
+export function BalanceRow({ token, value }: { token: "FXRP" | "XRP"; value: number | null }) {
   return (
     <div className="flex items-center justify-between gap-2 py-1.5 border-t border-steel-line first:border-t-0">
       <TokenPill token={token} />
-      <span key={value} className="balance-pop mono-data text-[0.88rem] sm:text-[0.95rem] text-ink">
-        {value.toLocaleString()}
-      </span>
+      {value === null ? (
+        <span className="mono-data text-[0.88rem] sm:text-[0.95rem] text-ink-3">—</span>
+      ) : (
+        <span key={value} className="balance-pop mono-data text-[0.88rem] sm:text-[0.95rem] text-ink">
+          {value.toLocaleString()}
+        </span>
+      )}
     </div>
   );
 }

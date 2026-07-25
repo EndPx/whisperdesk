@@ -120,10 +120,19 @@ function toneClass(tone: LogTone) {
 type DemoState = {
   enabled: boolean;
   escrow?: string;
-  taker?: { fxrp: string };
+  taker?: { fxrp: string; xrp?: string };
   maker?: { fxrp: string };
   vault?: { fxrp: string };
 };
+
+// Coerces an optional numeric string to a number, or null when absent/unparseable — used for
+// figures that can legitimately be "not available right now" (taker.xrp is a best-effort XRPL
+// read; see /api/demo/state) rather than always defaulting to 0.
+function toNumOrNull(v: string | undefined): number | null {
+  if (v === undefined) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
 
 type Countdown = { nowChain: number; refundAfter: number; graceSeconds: number; fetchedAt: number };
 
@@ -131,6 +140,7 @@ export default function DemoConsole() {
   const [enabled, setEnabled] = useState<boolean | null>(null); // null = still checking
   const [escrow, setEscrow] = useState<string | null>(null);
   const [takerFxrp, setTakerFxrp] = useState(0);
+  const [takerXrp, setTakerXrp] = useState<number | null>(null);
   const [makerFxrp, setMakerFxrp] = useState(0);
   const [vaultFxrp, setVaultFxrp] = useState(0);
 
@@ -223,6 +233,7 @@ export default function DemoConsole() {
     if (!mountedRef.current) return;
     setEscrow(data.escrow ?? null);
     setTakerFxrp(toNum(data.taker?.fxrp));
+    setTakerXrp(toNumOrNull(data.taker?.xrp));
     setMakerFxrp(toNum(data.maker?.fxrp));
     setVaultFxrp(toNum(data.vault?.fxrp));
   }, []);
@@ -374,6 +385,7 @@ export default function DemoConsole() {
         linkText: shortHash(payRes.data.xrplTx),
       });
       setPaymentPill(null);
+      await refreshState(); // taker's XRP figure updates the moment this leg actually lands
 
       const attestRes = await postJSON<{ roundId: string; requestHex: string; error?: string }>(
         "/api/demo/attest",
@@ -540,12 +552,18 @@ npm run happy-path`}
           <div className="flex items-center gap-2 sm:gap-5">
             <PartyCard sub="Taker" label="You">
               <BalanceRow token="FXRP" value={takerFxrp} />
+              <BalanceRow token="XRP" value={takerXrp} />
             </PartyCard>
 
             <Rail key={`ra-${pillTick}`} pill={railAPill} />
 
             <PartyCard sub="Escrow" label="WhisperDesk Vault" ring={vaultRing}>
               <BalanceRow token="FXRP" value={vaultFxrp} />
+              {vaultFxrp > 0 && (
+                <p className="mono-label text-[0.5rem] text-ink-3 mt-1.5 leading-snug">
+                  ↳ Taker&apos;s deposit, armed
+                </p>
+              )}
             </PartyCard>
 
             <Rail key={`rb-${pillTick}`} pill={railBPill} />

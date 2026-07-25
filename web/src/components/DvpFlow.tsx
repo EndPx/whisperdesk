@@ -303,6 +303,12 @@ export default function DvpFlow() {
           Three parties. Nothing leaks. Nobody gets stiffed. Follow the trade from a sealed
           order to money in hand — and see exactly what happens if the buyer never pays.
         </p>
+        <p className="mt-4 max-w-[58ch] text-[0.9rem] leading-[1.6] text-ink-3">
+          <span className="text-ink-2">On size:</span> this walkthrough is production-sized — 5,000
+          FXRP, WhisperDesk&apos;s real minimum block. The live demo below settles 1 FXRP for 1 XRP
+          per run, since testnet XRPL faucets can&apos;t fund a 5,000-XRP counter-payment — the
+          receipts further down are those 1-FXRP settlements.
+        </p>
 
         {reducedMotion ? (
           <div className="mt-14 space-y-10">
