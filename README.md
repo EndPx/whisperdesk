@@ -83,9 +83,15 @@ that the TEE registry enforces as the only valid origin for our instructions. It
 **simulated-TEE** mode (`magic_pass`, `SIMULATED_TEE=true` / `MODE=1`), which Flare states is
 eligible for judging. See `docs/fce-runbook.md` and `docs/enclave-deploy-checklist.md`.
 
-Check it yourself: `node scripts/enclave-loop/monitor.mjs` reads the live enclave and Coston2 and
-asserts all four — the escrow trusts the running enclave's key, the registry routes instructions to
-it, its machine status is `PRODUCTION`, and the URL registered onchain is the one actually serving.
+Check it yourself — needs only Node, no keys and no config:
+
+```bash
+cd scripts/enclave-loop && npm install && node monitor.mjs
+```
+
+It reads the live enclave and Coston2 and asserts all four: the escrow trusts the running enclave's
+key, the registry routes instructions to it, its machine status is `PRODUCTION`, and the URL
+registered onchain is the one actually serving. Exit 0 means all four passed.
 
 | Component | Address / URL |
 |---|---|
@@ -150,7 +156,7 @@ Why it matters: decode that transaction's instruction event and the message is
 `abi.encode(0xBF164f13…c4F6, <ECIES ciphertext>)` — the taker address was written by the *contract*
 from `msg.sender`, not supplied by the client. A caller cannot claim to be a different taker
 (`contracts/test/` proves the binding; 117/117 tests green). Verify it yourself against live chain
-state: `node scripts/enclave-loop/verify-onchain-rfq.mjs`.
+state: `cd scripts/enclave-loop && npm install && node verify-onchain-rfq.mjs`.
 
 ### Full settlement through the onchain ingress
 
@@ -173,9 +179,10 @@ operator only — never shared, never committed. `onchain-ingress-readiness.mjs`
 preconditions first: the registered TEE machine must be the one actually running, and the
 enclave's signing policy must match the on-chain reward epoch.
 
-What you *can* verify independently, without those keys: `node scripts/enclave-loop/verify-onchain-rfq.mjs`
-(reads Coston2 directly and checks the registry/instruction binding live), `cd contracts && forge test`
-(the full 117/117 suite), and the explorer receipts linked throughout this README.
+What you *can* verify independently, without those keys:
+`cd scripts/enclave-loop && npm install && node verify-onchain-rfq.mjs` (reads Coston2 directly and
+checks the registry/instruction binding live), `cd contracts && forge test` (the full 117/117 suite),
+and the explorer receipts linked throughout this README.
 
 Scope note: the receipts in *this* table came in over `POST /direct` with `WD_ALLOW_DIRECT_RFQ=true`,
 where the taker identity in the envelope is self-attested. That is the ingress the website's
