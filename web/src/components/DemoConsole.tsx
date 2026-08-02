@@ -17,6 +17,7 @@ import { detectProvider } from "@/lib/wallet-client";
 --------------------------------------------------------------------------- */
 
 const COSTON2_TX = (hash: string) => `https://coston2-explorer.flare.network/tx/${hash}`;
+const COSTON2_ADDRESS = (addr: string) => `https://coston2-explorer.flare.network/address/${addr}`;
 const XRPL_TX = (hash: string) => `https://testnet.xrpl.org/transactions/${hash}`;
 
 const FALLBACK_RECEIPTS = [
@@ -544,7 +545,16 @@ npm run happy-path`}
     <div className="mt-6 space-y-8">
       {escrow && (
         <p className="mono-label text-[0.56rem] text-ink-3">
-          Escrow <span className="text-ink-2">{shortHash(escrow)}</span>
+          Escrow{" "}
+          <a
+            href={COSTON2_ADDRESS(escrow)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-ice hover:underline"
+            title={escrow}
+          >
+            {shortHash(escrow)}
+          </a>
         </p>
       )}
 

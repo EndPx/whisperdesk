@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ethers } from "ethers";
 import { BalanceRow, IconCheck, PartyCard, Rail, type PillSpec } from "@/components/flow/parts";
+import { useWalletAccount } from "@/lib/useWalletAccount";
 import {
   connect,
   detectProvider,
@@ -278,8 +279,9 @@ export default function MakerMode({
   }, []);
 
   // S1 — connect
-  const [hasProvider, setHasProvider] = useState<boolean | null>(null);
-  const [address, setAddress] = useState<string | null>(null);
+  // Shared with taker mode via useWalletAccount, so switching between the two own-wallet modes
+  // keeps the connection instead of dropping it with this component's state.
+  const { hasProvider, address, setAddress } = useWalletAccount();
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [enabled, setEnabled] = useState<boolean | null>(null);
@@ -364,16 +366,6 @@ export default function MakerMode({
     ]);
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    Promise.resolve().then(() => {
-      if (!cancelled) setHasProvider(!!detectProvider());
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   // Ticks the RFQ-window and payment-deadline countdowns once a second. Date.now() stays inside
   // the deferred interval callback (never called synchronously in the render body).
   const [, setTick] = useState(0);
@@ -435,6 +427,14 @@ export default function MakerMode({
     setFreeBond(res.data.freeBond);
   }, [addLog]);
 
+  // Load balances whenever an account appears — whether from an explicit connect or from
+  // useWalletAccount restoring one silently. Owning the refresh here rather than inside
+  // handleConnect is what gives the restored path the same status the clicked path always had.
+  useEffect(() => {
+    if (!address) return;
+    void refreshStatus(address);
+  }, [address, refreshStatus]);
+
   const handleConnect = useCallback(async () => {
     setConnecting(true);
     setConnectError(null);
@@ -448,7 +448,7 @@ export default function MakerMode({
         const msg = netErr instanceof Error ? netErr.message : "could not switch to Coston2";
         addLog(`Network switch: ${msg}`, { tone: "error" });
       }
-      await refreshStatus(addr);
+      // No refreshStatus() call here — the effect above owns it, for both connect and restore.
     } catch (err) {
       const msg = walletErrorMessage(err, "wallet connection failed");
       setConnectError(msg);

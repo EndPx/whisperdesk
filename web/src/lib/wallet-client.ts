@@ -50,6 +50,48 @@ export async function connect(): Promise<string> {
   });
 }
 
+/** Returns the account this site is ALREADY authorized to use, or null — without prompting.
+ *
+ *  `eth_accounts` is the silent counterpart to `eth_requestAccounts`: the authorization lives in
+ *  the wallet and survives page loads and React unmounts, so this is what lets a mode switch
+ *  restore the connection instead of asking the judge to press Connect again. */
+export async function getAuthorizedAccount(): Promise<string | null> {
+  const eth = detectProvider();
+  if (!eth) return null;
+  try {
+    const accounts = (await eth.request({ method: "eth_accounts", params: [] })) as string[];
+    return accounts?.[0] ?? null;
+  } catch {
+    // A wallet that refuses the silent read is simply treated as "not connected yet" — the user
+    // can still connect explicitly. Never surface this as an error.
+    return null;
+  }
+}
+
+/** Returns the wallet's current chain id (hex), or null if it cannot be read. */
+export async function getConnectedChainId(): Promise<string | null> {
+  const eth = detectProvider();
+  if (!eth) return null;
+  try {
+    return (await eth.request({ method: "eth_chainId", params: [] })) as string;
+  } catch {
+    return null;
+  }
+}
+
+/** Subscribes to the wallet's accountsChanged event. Returns an unsubscribe function (a no-op one
+ *  if the provider does not support events). */
+export function onAccountsChanged(cb: (address: string | null) => void): () => void {
+  const eth = typeof window === "undefined" ? null : window.ethereum;
+  if (!eth?.on) return () => {};
+  const handler = (...args: unknown[]) => {
+    const accounts = args[0] as string[] | undefined;
+    cb(accounts?.[0] ?? null);
+  };
+  eth.on("accountsChanged", handler);
+  return () => eth.removeListener?.("accountsChanged", handler);
+}
+
 /** Switches the wallet to Coston2, adding the network first if the wallet doesn't know it yet
  *  (error code 4902). */
 export async function ensureCoston2(): Promise<void> {

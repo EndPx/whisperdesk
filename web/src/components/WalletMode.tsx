@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BalanceRow, IconCheck, PartyCard, Rail, type PillSpec } from "@/components/flow/parts";
+import { useWalletAccount } from "@/lib/useWalletAccount";
 import {
   connect,
-  detectProvider,
   ensureCoston2,
   sendApprove,
   sendDeposit,
@@ -162,8 +162,9 @@ export default function WalletMode({
   }, []);
 
   // S1 — connect
-  const [hasProvider, setHasProvider] = useState<boolean | null>(null); // null = still checking
-  const [address, setAddress] = useState<string | null>(null);
+  // Provider detection + the connected account both live in useWalletAccount, so the connection
+  // survives a switch to maker mode instead of being thrown away with this component's state.
+  const { hasProvider, address, setAddress } = useWalletAccount();
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [enabled, setEnabled] = useState<boolean | null>(null); // null until first /api/wallet/status call
@@ -231,19 +232,6 @@ export default function WalletMode({
     ]);
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    // Detection is synchronous, but setState is deferred into a microtask (matching
-    // DemoConsole.tsx's async-IIFE initial-check pattern) rather than called directly in the
-    // effect body.
-    Promise.resolve().then(() => {
-      if (!cancelled) setHasProvider(!!detectProvider());
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const currentStep = !address ? 1 : !faucetDone ? 2 : !xrplAddress ? 3 : s4Stage !== "done" ? 4 : 5;
 
   const walletBusy =
@@ -277,6 +265,14 @@ export default function WalletMode({
     setFxrp(res.data.fxrp);
   }, [addLog]);
 
+  // Load balances whenever an account appears — whether from an explicit connect or from
+  // useWalletAccount restoring one silently. Owning the refresh here rather than inside
+  // handleConnect is what gives the restored path the same status the clicked path always had.
+  useEffect(() => {
+    if (!address) return;
+    void refreshStatus(address);
+  }, [address, refreshStatus]);
+
   const handleConnect = useCallback(async () => {
     setConnecting(true);
     setConnectError(null);
@@ -290,7 +286,7 @@ export default function WalletMode({
         const msg = netErr instanceof Error ? netErr.message : "could not switch to Coston2";
         addLog(`Network switch: ${msg}`, { tone: "error" });
       }
-      await refreshStatus(addr);
+      // No refreshStatus() call here — the effect above owns it, for both connect and restore.
     } catch (err) {
       const msg = err instanceof WalletRejectionError ? err.message : err instanceof Error ? err.message : "wallet connection failed";
       setConnectError(msg);
