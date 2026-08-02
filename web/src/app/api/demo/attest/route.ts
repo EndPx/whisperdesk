@@ -30,7 +30,9 @@ export async function POST(request: Request) {
         ? "You've hit the per-visitor limit for the shared one-click demo today."
         : "The shared one-click demo has hit its daily limit across all visitors.";
     return NextResponse.json(
-      { error: `${scopeMsg} Try again later, or use "Be the taker" to run it with your own wallet.`, retryAfterSeconds: limit.retryAfterSeconds },
+      // No "switch modes" advice here: this route is shared by the one-click path AND taker mode
+      // (WalletMode.tsx step 5), so pointing at taker mode would be nonsense for half the callers.
+      { error: `${scopeMsg} Try again later, or check the settled receipts below.`, retryAfterSeconds: limit.retryAfterSeconds },
       { status: 429 },
     );
   }

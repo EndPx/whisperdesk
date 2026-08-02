@@ -31,7 +31,7 @@ export async function POST(request: Request) {
         ? "You've hit the per-visitor limit for the shared one-click demo today."
         : "The shared one-click demo has hit its daily limit across all visitors.";
     return NextResponse.json(
-      { error: `${scopeMsg} Try again later, or use "Be the taker" to run it with your own wallet.`, retryAfterSeconds: limit.retryAfterSeconds },
+      { error: `${scopeMsg} Try again later, or run it with your own wallet — "as the taker" on the demo page.`, retryAfterSeconds: limit.retryAfterSeconds },
       { status: 429 },
     );
   }

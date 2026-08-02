@@ -616,8 +616,8 @@ npm run happy-path`}
       )}
       {rateLimited && (
         <p className="mono-label text-[0.66rem] text-iron-red">
-          The shared one-click demo has hit its daily limit. Use &quot;Be the taker&quot; to run it with
-          your own wallet, or check the receipts below.
+          The shared one-click demo has hit its daily limit. Run it with your own wallet instead —
+          &quot;as the taker&quot; above — or check the receipts below.
         </p>
       )}
       {error && <p className="mono-label text-[0.66rem] text-iron-red">{error}</p>}
@@ -669,7 +669,11 @@ npm run happy-path`}
 
   return (
     <div className="mt-10">
-      <div className="flex items-center gap-2">
+      {/* Mode switcher, deliberately NOT three equal doors. One-click is the default and carries the
+          visual weight; the two own-wallet modes sit on a quieter second line. Same three
+          destinations, same single click to reach any of them — only the emphasis differs, so a
+          judge who just wants to see it settle never has to make a choice first. */}
+      <div>
         <button
           type="button"
           onClick={() => {
@@ -678,53 +682,60 @@ npm run happy-path`}
           }}
           disabled={switcherDisabled}
           aria-pressed={mode === "one-click"}
-          className={`mono-label text-[0.62rem] px-4 py-2 border transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none ${
+          className={`mono-label text-[0.68rem] px-5 py-2.5 border transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none ${
             mode === "one-click"
               ? "border-ice/50 text-ice bg-ice/10"
               : "border-steel-line-2 text-ink-2 hover:text-ink hover:border-ice-deep/60"
           }`}
         >
-          One-click (desk wallet) — settles now
+          {/* Names the MODE, not the action. An earlier draft read "Watch it settle now", which
+              collided with the "Run live settlement" button further down the same page — two
+              near-synonymous labels where only one actually sends a transaction. */}
+          No setup — use the desk&apos;s wallet
         </button>
-        <button
-          type="button"
-          onClick={() => {
-            userPickedModeRef.current = true;
-            setMode("wallet");
-          }}
-          disabled={switcherDisabled}
-          aria-pressed={mode === "wallet"}
-          className={`mono-label text-[0.62rem] px-4 py-2 border transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none ${
-            mode === "wallet"
-              ? "border-ice/50 text-ice bg-ice/10"
-              : "border-steel-line-2 text-ink-2 hover:text-ink hover:border-ice-deep/60"
-          }`}
-        >
-          Be the taker (your wallet)
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            userPickedModeRef.current = true;
-            setMode("maker");
-          }}
-          disabled={switcherDisabled}
-          aria-pressed={mode === "maker"}
-          className={`mono-label text-[0.62rem] px-4 py-2 border transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none ${
-            mode === "maker"
-              ? "border-ice/50 text-ice bg-ice/10"
-              : "border-steel-line-2 text-ink-2 hover:text-ink hover:border-ice-deep/60"
-          }`}
-        >
-          Be the maker (your wallet)
-        </button>
+
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <span className="mono-label text-[0.56rem] text-ink-3">
+            Or be the counterparty, with your own wallet:
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              userPickedModeRef.current = true;
+              setMode("wallet");
+            }}
+            disabled={switcherDisabled}
+            aria-pressed={mode === "wallet"}
+            className={`mono-label text-[0.58rem] px-3 py-1.5 border transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none ${
+              mode === "wallet"
+                ? "border-ice/50 text-ice bg-ice/10"
+                : "border-steel-line-2 text-ink-2 hover:text-ink hover:border-ice-deep/60"
+            }`}
+          >
+            as the taker
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              userPickedModeRef.current = true;
+              setMode("maker");
+            }}
+            disabled={switcherDisabled}
+            aria-pressed={mode === "maker"}
+            className={`mono-label text-[0.58rem] px-3 py-1.5 border transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none ${
+              mode === "maker"
+                ? "border-ice/50 text-ice bg-ice/10"
+                : "border-steel-line-2 text-ink-2 hover:text-ink hover:border-ice-deep/60"
+            }`}
+          >
+            as the maker
+          </button>
+        </div>
       </div>
-      <p className="mono-label text-[0.56rem] text-ink-3 mt-3 max-w-[62ch]">
-        All three run a real lock → pay → attest → release settlement on Coston2 + XRPL — one-click
-        spends the desk&apos;s testnet keys, taker mode spends your own as the counterparty depositing
-        FXRP, and maker mode spends your own as the counterparty quoting blind against a sealed RFQ
-        and paying the XRP leg — the only mode where two independent parties are actually matched
-        inside the enclave.
+      <p className="mono-label text-[0.56rem] text-ink-3 mt-4 max-w-[62ch]">
+        All three run a real lock → pay → attest → release on Coston2 + XRPL. Maker mode is the only
+        one where two independent parties are actually matched inside the enclave — you quote blind
+        against a sealed RFQ and pay the XRP leg yourself.
       </p>
 
       {mode === "one-click" ? (

@@ -8,8 +8,9 @@ Thin FXRP liquidity means this order flow has nowhere safe to happen today; that
 what this proves out. Built for **Flare Summer Signal** — Bounty 2 (Confidential Compute).
 
 **▶ Try it: https://whisperdesk.endpx.cloud** — runs a real DvP settlement on Coston2 + XRPL Testnet
-in about 3 minutes. Two modes: *Be the taker* (your own MetaMask; the XRP lands on an XRPL address
-you control) or *One-click* (the desk's testnet keys, rate-limited). Live enclave:
+in about 3 minutes. Watch it settle on the desk's testnet keys (rate-limited), or be the counterparty
+with your own MetaMask — *as the taker*, where the XRP lands on an XRPL address you control, or *as
+the maker*, quoting blind against a sealed RFQ you cannot read. Live enclave:
 https://fce.endpx.cloud/info
 
 ## What is and isn't real here
