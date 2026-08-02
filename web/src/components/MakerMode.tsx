@@ -251,6 +251,10 @@ type MatchResponse = {
 type XrplAccountResponse = { address: string; seed: string; funded: boolean; error?: string; enabled?: boolean };
 type PayResponse = { xrplTx: string; error?: string; enabled?: boolean };
 type PaymentStatusResponse = { paid: boolean; xrplTx?: string; error?: string };
+
+/// "expired" is distinct from "timeout" on purpose: a timeout can be retried, an expired payment
+/// window cannot — the escrow will refuse the payment outright.
+type PollOutcome = { status: "paid"; tx: string | null } | { status: "expired" } | { status: "timeout" };
 type SettleResponse = { attested: boolean; roundId: string; requestHex: string; error?: string; enabled?: boolean };
 type ProofResponse = { ready: boolean; proof?: unknown; error?: string };
 type ReleaseResponse = { releaseTx: string; error?: string };
@@ -378,6 +382,11 @@ export default function MakerMode({
   const rfqRemainingSeconds = rfqWindowMs === null ? null : Math.floor((rfqWindowMs - Date.now()) / 1000);
   const paymentRemainingSeconds =
     paymentDeadlineMs === null ? null : Math.floor((paymentDeadlineMs - Date.now()) / 1000);
+
+  /// The on-chain payment window has closed with no payment landed. Derived rather than stored, so
+  /// it is true the instant the countdown hits zero — whether or not a poll happened to be running.
+  const paymentExpired =
+    s6Stage !== "done" && paymentRemainingSeconds !== null && paymentRemainingSeconds <= 0;
 
   const currentStep = !address
     ? 1
@@ -705,19 +714,29 @@ export default function MakerMode({
      S6 — pay the XRP leg: auto (throwaway account) or manual (pay yourself)
   ------------------------------------------------------------------------ */
 
-  const pollPaymentStatus = useCallback(async (id: string) => {
-    const start = Date.now();
-    while (Date.now() - start < PAYMENT_CAP_MS) {
-      if (!mountedRef.current) return null;
-      const res = await getJSON<PaymentStatusResponse>(`/api/maker/payment-status?matchId=${encodeURIComponent(id)}`);
-      if (!res.ok || !res.data) {
-        throw new Error(res.data?.error ?? "payment check failed");
+  /// Polls until the payment lands, the ON-CHAIN payment window closes, or the cap is hit.
+  ///
+  /// The deadline check is the important one. DvPEscrow rejects any payment whose ledger timestamp
+  /// is past `paymentDeadline` (`PaymentOutsideWindow`), so once that moment passes a payment can
+  /// never be released. Polling on regardless — which is what this did before — quietly invites the
+  /// maker to send XRP that is already worthless.
+  const pollPaymentStatus = useCallback(
+    async (id: string, deadlineMs: number | null): Promise<PollOutcome> => {
+      const start = Date.now();
+      while (Date.now() - start < PAYMENT_CAP_MS) {
+        if (!mountedRef.current) return { status: "timeout" };
+        if (deadlineMs !== null && Date.now() >= deadlineMs) return { status: "expired" };
+        const res = await getJSON<PaymentStatusResponse>(`/api/maker/payment-status?matchId=${encodeURIComponent(id)}`);
+        if (!res.ok || !res.data) {
+          throw new Error(res.data?.error ?? "payment check failed");
+        }
+        if (res.data.paid) return { status: "paid", tx: res.data.xrplTx ?? null };
+        await sleep(PAYMENT_POLL_MS);
       }
-      if (res.data.paid) return res.data.xrplTx ?? null;
-      await sleep(PAYMENT_POLL_MS);
-    }
-    return null;
-  }, []);
+      return { status: "timeout" };
+    },
+    []
+  );
 
   const runManualPay = useCallback(async () => {
     if (!matchId) return;
@@ -725,10 +744,20 @@ export default function MakerMode({
     setS6Stage("polling");
     setS6Error(null);
     try {
-      const tx = await pollPaymentStatus(matchId);
-      if (!tx) {
-        throw new Error("payment not detected within 10 minutes — check the address, drops, and tag");
+      const outcome = await pollPaymentStatus(matchId, paymentDeadlineMs);
+      if (outcome.status === "expired") {
+        // Deliberately not an s6Error: there is nothing to retry, the match is over. The expired
+        // panel explains what happens next instead of offering a button that cannot work.
+        addLog("Payment window closed before your XRP arrived — this match now takes the default path", {
+          tone: "error",
+        });
+        if (mountedRef.current) setS6Stage("idle");
+        return;
       }
+      if (outcome.status !== "paid" || !outcome.tx) {
+        throw new Error("payment not detected — check the address, drops, and tag");
+      }
+      const tx = outcome.tx;
       setPayXrplTx(tx);
       addLog("Your XRPL payment was detected", { href: XRPL_TX(tx), linkText: shortHash(tx), tone: "success" });
       if (mountedRef.current) setS6Stage("done");
@@ -738,7 +767,7 @@ export default function MakerMode({
       addLog(msg, { tone: "error" });
       setS6Stage("idle");
     }
-  }, [matchId, addLog, pollPaymentStatus]);
+  }, [matchId, paymentDeadlineMs, addLog, pollPaymentStatus]);
 
   const runAutoPay = useCallback(async () => {
     if (!matchId) return;
@@ -1270,35 +1299,71 @@ export default function MakerMode({
                 <span className="text-ink-3">Destination tag </span>
                 {destinationTag}
               </p>
-              <p className="mono-data text-[0.82rem] text-ice">
-                Pay before {fmtCountdown(paymentRemainingSeconds)} remaining
-              </p>
+              {paymentExpired ? (
+                <p className="mono-data text-[0.82rem] text-iron-red">Payment window closed</p>
+              ) : (
+                <p className="mono-data text-[0.82rem] text-ice">
+                  Pay before {fmtCountdown(paymentRemainingSeconds)} remaining
+                </p>
+              )}
             </div>
-            {payMethod === null && (
-              <div className="flex flex-wrap gap-3">
+
+            {/* Once the window has closed there is nothing left to do here, so no pay buttons, no
+                polling, and no retry — sending XRP now would be refused by the escrow. Say what
+                happened instead, including the part that costs the maker money. */}
+            {paymentExpired ? (
+              <div className="space-y-2 border border-iron-red/40 px-4 py-3.5">
+                <p className="mono-label text-[0.64rem] text-iron-red">
+                  The XRP never arrived in time, so this match takes the default path.
+                </p>
+                <p className="mono-label text-[0.58rem] text-ink-3 leading-relaxed">
+                  The escrow refuses any payment stamped after the deadline, so do not send it now —
+                  it could not be released. The taker&apos;s FXRP is refunded and your bond is slashed
+                  to compensate them. That is the protection working exactly as designed; it is the
+                  same default path the one-click demo can show on purpose.
+                </p>
                 <button
                   type="button"
-                  onClick={runManualPay}
-                  className="mono-label text-[0.68rem] px-5 py-2.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300"
+                  onClick={onSwitchToOneClick}
+                  className="mono-label text-[0.62rem] px-4 py-2 border border-steel-line-2 text-ink-2 hover:text-ink hover:border-ice-deep/60 transition-colors duration-300"
                 >
-                  I&apos;ll pay it myself
-                </button>
-                <button
-                  type="button"
-                  onClick={runAutoPay}
-                  className="mono-label text-[0.64rem] px-4 py-2.5 border border-steel-line-2 text-ink-2 hover:text-ink hover:border-ice-deep/60 transition-colors duration-300"
-                >
-                  Fund a throwaway XRPL account for me
+                  See a settlement that completes
                 </button>
               </div>
+            ) : (
+              payMethod === null && (
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Funding a throwaway account leads: it pays within seconds, where paying by hand
+                      means opening a wallet and copying an address and a tag against a window that
+                      is only PAYMENT_WINDOW seconds wide (180s on the deployed escrow). */}
+                  <button
+                    type="button"
+                    onClick={runAutoPay}
+                    className="mono-label text-[0.68rem] px-5 py-2.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300"
+                  >
+                    Fund a throwaway XRPL account for me
+                  </button>
+                  <button
+                    type="button"
+                    onClick={runManualPay}
+                    className="mono-label text-[0.64rem] px-4 py-2.5 border border-steel-line-2 text-ink-2 hover:text-ink hover:border-ice-deep/60 transition-colors duration-300"
+                  >
+                    I&apos;ll pay it myself
+                  </button>
+                  <span className="mono-label text-[0.56rem] text-ink-3 basis-full">
+                    Paying it yourself only works if a funded XRPL testnet wallet is already open —
+                    the window above is the real on-chain deadline, not a UI timer.
+                  </span>
+                </div>
+              )
             )}
-            {payMethod === "manual" && (
+            {payMethod === "manual" && !paymentExpired && (
               <p className="mono-label text-[0.64rem] text-ink-3 flex items-center gap-2">
                 <span className="ice-dot" />
                 Checking testnet.xrpl.org for your payment…
               </p>
             )}
-            {payMethod === "auto" && (
+            {payMethod === "auto" && !paymentExpired && (
               <div className="space-y-1.5">
                 {payXrplAddress && (
                   <p className="mono-data text-[0.8rem] text-ink break-all">
@@ -1316,7 +1381,7 @@ export default function MakerMode({
                 </p>
               </div>
             )}
-            {s6Error && (
+            {s6Error && !paymentExpired && (
               <div className="space-y-2">
                 <p className="mono-label text-[0.64rem] text-iron-red">{s6Error}</p>
                 <button
