@@ -786,6 +786,22 @@ export default function WalletMode({
       <StepShell n={3} title="XRPL receive address" done={!!xrplAddress} active={currentStep >= 3}>
         {!xrplAddress ? (
           <div className="space-y-4">
+            {/* Generate goes FIRST. Most judges have no XRPL testnet address, so this is the path
+                actually taken. The earlier layout led with the paste field, which meant the first
+                thing most people met was a button disabled until they typed something they did not
+                have — it read as broken rather than as waiting. */}
+            <button
+              type="button"
+              onClick={generateXrplAccount}
+              disabled={xrplGenBusy}
+              className="mono-label text-[0.68rem] px-5 py-2.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
+            >
+              {/* Named in full: reordering left "Generate one for me" with nothing to refer back to. */}
+              {xrplGenBusy ? "Generating…" : "Generate an XRPL testnet address for me"}
+            </button>
+            <p className="mono-label text-[0.56rem] text-ink-3">
+              or paste one you already control — the settlement pays out to it
+            </p>
             <div className="flex flex-wrap items-center gap-2">
               <input
                 type="text"
@@ -803,15 +819,6 @@ export default function WalletMode({
                 Use this address
               </button>
             </div>
-            <p className="mono-label text-[0.56rem] text-ink-3">or</p>
-            <button
-              type="button"
-              onClick={generateXrplAccount}
-              disabled={xrplGenBusy}
-              className="mono-label text-[0.68rem] px-5 py-2.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
-            >
-              {xrplGenBusy ? "Generating…" : "Generate one for me"}
-            </button>
             {xrplError && <p className="mono-label text-[0.64rem] text-iron-red">{xrplError}</p>}
           </div>
         ) : (
