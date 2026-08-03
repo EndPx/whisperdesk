@@ -81,13 +81,20 @@ contract DeployIntegration is Script {
         require(ftsoV2 != address(0), "registry: FtsoV2 not resolved");
         require(fdcVerification != address(0), "registry: FdcVerification not resolved");
 
+        // Optional override so the escrow can be wired to an EXISTING token instead of a fresh
+        // mintable mock — specifically the FAssets-minted FXRP on Coston2
+        // (resolve it live: AssetManagerFXRP.fAsset()). Both are 6-decimal, so no unit changes.
+        // Unset = original behaviour, a fresh MockFXRP the demo faucet can mint at will. That
+        // faucet is the reason the mock exists: real FXRP cannot be conjured per visitor.
+        address fxrpOverride = vm.envOr("FXRP_ADDRESS", address(0));
+
         vm.startBroadcast(pk);
 
-        MockFXRP fxrp = new MockFXRP();
-        BondLedger bond = new BondLedger(IERC20(address(fxrp)));
+        address fxrp = fxrpOverride == address(0) ? address(new MockFXRP()) : fxrpOverride;
+        BondLedger bond = new BondLedger(IERC20(fxrp));
 
         DvPEscrow escrow = new DvPEscrow(
-            IERC20(address(fxrp)),
+            IERC20(fxrp),
             IBondLedger(address(bond)),
             teeSigner, // defaults to `dev` (deployer key); override via TEE_SIGNER for a live enclave
             IFtsoV2(ftsoV2),
@@ -107,7 +114,7 @@ contract DeployIntegration is Script {
         console.log("Network              Coston2 (chainId 114)");
         console.log("Deployer            ", dev);
         console.log("teeSigner           ", teeSigner);
-        console.log("MockFXRP            ", address(fxrp));
+        console.log(fxrpOverride == address(0) ? "MockFXRP            " : "FXRP (existing)     ", fxrp);
         console.log("BondLedger          ", address(bond));
         console.log("DvPEscrow           ", address(escrow));
         console.log("Real FtsoV2         ", ftsoV2);
