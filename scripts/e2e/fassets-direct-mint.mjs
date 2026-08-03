@@ -11,6 +11,13 @@
 // proof can simply be re-requested for the same transactionId. Re-run with --tx=<hash> to do that
 // instead of paying again.
 //
+// A revert with PaymentAlreadyConfirmed() (0x18dce79f) means the mint ALREADY LANDED: Flare runs
+// executor bots that watch the Core Vault and execute mintings for the 0.1 XRP executor fee, and
+// one of them can beat this script to it. That is success wearing an error message — check
+// balanceOf(recipient) and the token's Transfer(0x0 -> recipient) log before treating it as a
+// failure. (Exactly this happened on the first run: our own execute attempt failed on a wrongly
+// bound proofOwner, and a bot minted the 10 FXRP two minutes later.)
+//
 // Usage (from the repo root, so dotenv finds .env):
 //   node scripts/e2e/fassets-direct-mint.mjs
 //   node scripts/e2e/fassets-direct-mint.mjs --tx=<xrplTxHash>     re-prove an existing payment
@@ -145,13 +152,16 @@ async function main() {
     await new Promise((r) => setTimeout(r, 15000));
   }
 
-  // proofOwner binds the proof to the contract that will consume it — here the AssetManager.
-  console.log(`\n[fdc] requesting XRPPayment attestation (proofOwner=${amAddress})`);
+  // proofOwner must be the CALLER of executeDirectMinting, not the AssetManager. The check is
+  // TransactionAttestation.sol: `require(_proofOwner == address(0) || _proofOwner == msg.sender,
+  // OnlyProofOwner())` — binding to the AssetManager is exactly the 0x9f0cd421 revert the first
+  // attempt hit. Found by hashing all 313 error signatures in flare-foundation/fassets.
+  console.log(`\n[fdc] requesting XRPPayment attestation (proofOwner=${wallet.address} = tx sender)`);
   const proof = await requestAndAwaitProof({
     provider,
     wallet,
     txHashHex: `0x${xrplTx.replace(/^0x/, "")}`,
-    proofOwner: amAddress,
+    proofOwner: wallet.address,
     onProgress: (m) => console.log(`[fdc] ${m}`),
   });
   if (!proof) throw new Error("no FDC proof within the timeout");
