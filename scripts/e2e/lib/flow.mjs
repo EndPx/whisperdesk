@@ -51,11 +51,26 @@ export async function readLiveFtsoMid(ftso) {
   return { mid18, ts, fee };
 }
 
-/// Mints + approves + deposits `amount` FXRP for `wallet` into the escrow, arming it for
+/// Puts `amount` FXRP into `wallet`. MockFXRP is freely mintable; the REAL FAssets FXRP has no
+/// public mint, so there the deployer's own (FAssets-minted) balance funds the wallet by transfer.
+/// Which path ran is logged loudly — a settlement against the real asset is the whole point of
+/// wiring an escrow to it, and it must not look like a mock run in the transcript.
+async function acquireFxrp(clients, wallet, amount) {
+  const { fxrp, deployerWallet } = clients;
+  try {
+    await (await fxrp.connect(wallet).mint(wallet.address, amount)).wait();
+    return "minted (mock)";
+  } catch {
+    await (await fxrp.connect(deployerWallet).transfer(wallet.address, amount)).wait();
+    return "transferred from deployer (real FAssets FXRP — no public mint)";
+  }
+}
+
+/// Funds + approves + deposits `amount` FXRP for `wallet` into the escrow, arming it for
 /// `armedForSeconds` past now.
 export async function fundTakerDeposit(clients, wallet, amount, armedForSeconds = 3600) {
   const { fxrp, escrow } = clients;
-  await (await fxrp.connect(wallet).mint(wallet.address, amount)).wait();
+  console.log(`[fund] taker: ${await acquireFxrp(clients, wallet, amount)}`);
   await (await fxrp.connect(wallet).approve(await escrow.getAddress(), amount)).wait();
   const armedUntil = Math.floor(Date.now() / 1000) + armedForSeconds;
   await (await escrow.connect(wallet).deposit(amount, armedUntil)).wait();
@@ -64,7 +79,7 @@ export async function fundTakerDeposit(clients, wallet, amount, armedForSeconds 
 /// Mints + approves + deposits `amount` FXRP bond for `wallet` into the BondLedger.
 export async function fundMakerBond(clients, wallet, amount) {
   const { fxrp, bondLedger } = clients;
-  await (await fxrp.connect(wallet).mint(wallet.address, amount)).wait();
+  console.log(`[fund] maker: ${await acquireFxrp(clients, wallet, amount)}`);
   await (await fxrp.connect(wallet).approve(await bondLedger.getAddress(), amount)).wait();
   await (await bondLedger.connect(wallet).depositBond(amount)).wait();
 }

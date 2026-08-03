@@ -17,9 +17,11 @@ https://fce.endpx.cloud/info
 
 This is a hackathon prototype, and these are its scope boundaries, not apologies:
 
-- **FXRP is a MockFXRP test token** (mintable, unbacked), not FAssets-minted FXRP. The DvP/settlement
-  machinery around it — escrow, FDC proof check, price band, bond slashing — is real; the asset is a
-  stand-in.
+- **The interactive demo settles a MockFXRP test token** (mintable, unbacked) — the demo faucet has
+  to hand every visitor FXRP, and the real asset cannot be conjured per visitor. The mechanism
+  itself is not mock-bound: **one full settlement has also run against the real FAssets-minted FXRP**
+  (`AssetManagerFXRP.fAsset()` = [`0x0b6A3645…3dc7`](https://coston2-explorer.flare.network/address/0x0b6A3645c240605887a5532109323A3E12273dc7),
+  6 decimals, same units) on a second escrow instance — receipts below.
 - **The enclave runs in simulated-TEE mode** (attestation `magic_pass`, `SIMULATED_TEE=true`) — the
   path Flare states is eligible for judging; GCP Confidential Space is not required. We still did the
   full onchain registration on top of it: our own extension (`65641`), a TEE machine registered and
@@ -119,6 +121,24 @@ Both flows ran end-to-end against real Coston2 + real XRPL Testnet + the real FD
 layer. The `MatchInstruction` for these two runs was signed by the integration instance's registered
 `teeSigner` key (simulated-TEE custody, same `WD_MATCH_V1`/`ecrecover` scheme as the enclave —
 byte-compatibility proven in `extension/smoketest/`).
+
+### Settled against the real FAssets FXRP — not the mock
+
+Same mechanism, same commands, but the asset is the genuine FAssets-minted FXRP
+([`0x0b6A3645…3dc7`](https://coston2-explorer.flare.network/address/0x0b6A3645c240605887a5532109323A3E12273dc7),
+symbol `FTestXRP`) on a dedicated escrow instance
+([`0xfa0895ce…e087`](https://coston2-explorer.flare.network/address/0xfa0895ce6af9ef9764afbb967d822dadc13ae087)).
+No `mint()` exists on the real asset, so the wallets were funded by transfer from the deployer's own
+FAssets balance — the run's transcript says so explicitly.
+
+| Step | Receipt |
+|---|---|
+| `lock()` on the real-FXRP escrow | https://coston2-explorer.flare.network/tx/0x874e167d710c04f1c670c779288f620003061dc9f808d5284bfeef0ba9cc7dbb |
+| XRPL payment (1,000,000 drops, destination tag 1) | https://testnet.xrpl.org/transactions/9188C50DC94E3D3B314B5B99E5ABE4DB3585E1C926ABB3125542EA20B3490ADF |
+| FDC attestation request (voting round 1414419) | https://coston2-explorer.flare.network/tx/0x7c990bea581a5aa0f1b01e63d689c6b1b7e150678bc0ee5a0c18655ca6325371 |
+| `release()` — maker received 1.0 **real** FXRP | https://coston2-explorer.flare.network/tx/0x9ea70cafebbf0e6b937216af9cea374d798e6eb0466b7104fe40fd7e256aaea3 |
+
+Reproduce: `FXRP_ADDRESS=0x0b6A3645c240605887a5532109323A3E12273dc7 forge script script/DeployIntegration.s.sol --rpc-url coston2 --broadcast --slow`, then point `happy-path.mjs` at the printed escrow.
 
 ### The enclave loop — signed by the live enclave, end to end
 

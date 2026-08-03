@@ -30,6 +30,9 @@ export const DVP_ESCROW_ABI = [
 export const MOCK_FXRP_ABI = [
   "function mint(address to, uint256 amount)",
   "function approve(address spender, uint256 amount) returns (bool)",
+  // transfer is here for the REAL FAssets FXRP, which has no public mint — flow.mjs falls back to
+  // funding wallets by transfer from the deployer's own FAssets-minted balance.
+  "function transfer(address to, uint256 amount) returns (bool)",
   "function balanceOf(address) view returns (uint256)",
   "function decimals() view returns (uint8)",
 ];
