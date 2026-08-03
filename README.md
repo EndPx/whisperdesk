@@ -15,6 +15,8 @@ with your own MetaMask — *as the taker*, where the XRP lands on an XRPL addres
 the maker*, quoting blind against a sealed RFQ you cannot read. Live enclave:
 https://fce.endpx.cloud/info
 
+![WhisperDesk architecture — seal, match blind, settle or slash](assets/architecture.svg)
+
 ## What is and isn't real here
 
 This is a hackathon prototype, and these are its scope boundaries, not apologies:
@@ -37,8 +39,8 @@ This is a hackathon prototype, and these are its scope boundaries, not apologies
   still uses `POST /direct` (API-keyed, `WD_ALLOW_DIRECT_RFQ=true`), where the taker is
   self-attested, because it has to finish inside a browser session rather than wait on the auction
   window plus two extra onchain transactions.
-- **Every trade you can run here is 1 FXRP, not an institutional block.** `docs/design.md`'s
-  canonical policy is a 5,000 FXRP minimum block (`MIN_BLOCK_FXRP`); the deployed integration
+- **Every trade you can run here is 1 FXRP, not an institutional block.** The desk's canonical
+  policy is a 5,000 FXRP minimum block (`MIN_BLOCK_FXRP`); the deployed integration
   instance (`contracts/script/DeployIntegration.s.sol`) sets it to `1e6` (1 FXRP) instead, because a
   5,000-FXRP block needs ~5,000 XRP of counter-payment on the XRPL leg, and a faucet-funded XRPL
   testnet account cannot move that. Every receipt in this README is a 1-FXRP trade under that
@@ -50,8 +52,7 @@ This is a hackathon prototype, and these are its scope boundaries, not apologies
 ## What it does
 
 - **Sealed matching in a TEE.** RFQ side, size, limit, and the identity↔order mapping of the
-  unmatched book exist only inside the enclave, RAM-only, never in a database or log
-  (`docs/design.md` §2, Zone 1).
+  unmatched book exist only inside the enclave, RAM-only, never in a database or log.
 - **DvP settlement, chain-enforced.** `DvPEscrow.release()` pays FXRP to the maker only against an
   FDC `XRPPayment` proof bound to that exact escrow instance (`proofOwner == address(this)`) — a
   proof for one trade can never be replayed against another.
@@ -86,7 +87,7 @@ The FCE extension is registered and running on Coston2, hosted at `https://fce.e
 our own extension id, our own TEE machine at `PRODUCTION` status, and our own instruction sender
 that the TEE registry enforces as the only valid origin for our instructions. It runs in
 **simulated-TEE** mode (`magic_pass`, `SIMULATED_TEE=true` / `MODE=1`), which Flare states is
-eligible for judging. See `docs/fce-runbook.md` and `docs/enclave-deploy-checklist.md`.
+eligible for judging.
 
 Check it yourself — needs only Node, no keys and no config:
 
@@ -202,8 +203,8 @@ quote over `/direct` (quotes are private maker data and never touch the chain):
 This is the operator's reproduction path: `scripts/enclave-loop/onchain-loop.mjs` (RFQ → quote →
 match, prices taken from the live FTSOv2 mid so the run doesn't go stale) followed by `run.mjs`
 (lock → pay → prove → release) run on the VPS beside a prebuilt `wd-client` binary and require
-`DIRECT_API_KEY`, which per `docs/enclave-deploy-checklist.md` is generated and held by the
-operator only — never shared, never committed. `onchain-ingress-readiness.mjs` checks the two
+`DIRECT_API_KEY`, which is generated and held by the operator only — never shared, never
+committed. `onchain-ingress-readiness.mjs` checks the two
 preconditions first: the registered TEE machine must be the one actually running, and the
 enclave's signing policy must match the on-chain reward epoch.
 
@@ -219,8 +220,8 @@ ingress — `WhisperDeskInstructionSender.submitRfq`, which stamps the taker fro
 deployed, registry-enforced, and has settled end to end; its receipts are in the next section.
 Everything downstream of either ingress is identical: sealing, in-enclave matching, EIP-712 maker
 auth, enclave signing, and the onchain `ecrecover` check. The enclave runs in simulated-TEE mode
-(`magic_pass`), and its identity key regenerates on every restart by design (see
-`docs/enclave-deploy-checklist.md`).
+(`magic_pass`), and its identity key regenerates on every restart by design — which is exactly
+what the monitoring cron watches for.
 
 ## Judge quickstart (5 minutes)
 
@@ -314,8 +315,7 @@ It never holds funds. Every settlement rule is enforced onchain regardless of wh
 does or claims: TEE signature verification (`ecrecover == teeSigner`), the FTSOv2 ±1% band
 re-check, FDC proof consumption bound to one escrow instance, deadlines, and bond slashing. Worst
 case if the enclave is fully compromised: order-flow confidentiality is lost and a match can land
-at the edge of the price band — loss bounded at 1% of notional, no fund theft possible. Full spec
-and worst-case analysis: `docs/design.md` §2 (Trust Boundaries).
+at the edge of the price band — loss bounded at 1% of notional, no fund theft possible.
 
 ## Repo layout
 
@@ -327,7 +327,6 @@ and worst-case analysis: `docs/design.md` §2 (Trust Boundaries).
 | `scripts/e2e/` | Live DvP end-to-end runners (`happy-path.mjs`, `default-path.mjs`) against a deployed integration instance |
 | `scripts/fdc-spike/` | Step-2 FDC XRPL spike that produced the GO/NO-GO gate decision |
 | `web/` | Next.js landing page |
-| `docs/` | `design.md` (full technical spec), `fce-runbook.md` (enclave bring-up), `ui-design-brief.md` |
 
 ## Built during the hackathon
 

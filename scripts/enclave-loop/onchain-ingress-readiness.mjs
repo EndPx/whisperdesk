@@ -102,7 +102,7 @@ if (!policyOk) {
   process.exit(1);
 }
 console.log("NOT READY — policy is fine, but the machine registration is stale.");
-console.log("Re-register the running enclave (⛔ read docs/enclave-deploy-checklist.md first):");
+console.log("Re-register the running enclave (operator step — pauses routing briefly):");
 console.log("  ssh root@76.13.179.205");
 console.log("  cd /root/whisperdesk/fce-extension-scaffold && ./scripts/post-build.sh");
 console.log("Then confirm getRandomTeeIds returns the running enclave, and re-run this check.");

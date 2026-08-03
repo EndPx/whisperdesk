@@ -134,10 +134,9 @@ async function main() {
   console.error(`DRIFT: live enclave address (from ${EXT_PROXY_URL}/info) = ${enclaveAddress}`);
   console.error(`DRIFT: escrow.teeSigner() (${ESCROW_ADDRESS} on Coston2)  = ${teeSigner}`);
   console.error(
-    `DRIFT: FIX — re-run setTeeSigner with the NEW enclave address. See ` +
-      `docs/enclave-deploy-checklist.md §5 ("Escrow deploy + TEE_SIGNER wiring") for the exact ` +
+    `DRIFT: FIX — re-run setTeeSigner with the NEW enclave address: ` +
       `cast send <escrow-owner-key> ${ESCROW_ADDRESS} "setTeeSigner(address)" ${enclaveAddress} --rpc-url coston2 ` +
-      `command and the full rebind runbook (register-tee -command rRap, then setTeeSigner).`
+      `(full rebind order: register-tee -command rRap first, then setTeeSigner).`
   );
   process.exit(1);
 }

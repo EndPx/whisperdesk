@@ -134,7 +134,7 @@ async function main() {
       console.error(
         `DRIFT teeSigner: FIX — cast send <escrow-owner-key> ${ESCROW_ADDRESS} ` +
           `"setTeeSigner(address)" ${liveAddress} --rpc-url coston2 ` +
-          `(see docs/enclave-deploy-checklist.md §5 "Escrow deploy + TEE_SIGNER wiring").`
+          `(operator runbook step: escrow deploy + TEE_SIGNER wiring).`
       );
     }
   } catch (err) {
@@ -176,8 +176,8 @@ async function main() {
       );
       console.error(`  ssh root@76.13.179.205 'cd /root/whisperdesk/fce-extension-scaffold && ./scripts/post-build.sh'`);
       console.error(
-        `DRIFT machine-registration: see docs/enclave-deploy-checklist.md ` +
-          `"Onchain RFQ ingress (submitRfq)" for the full runbook.`
+        `DRIFT machine-registration: the two commands above pause the stale machine and ` +
+          `re-register the running one — run them in that order.`
       );
     }
   } catch (err) {
@@ -234,7 +234,7 @@ async function main() {
         );
         console.error(
           `DRIFT machine-url: FIX — point EXT_PROXY_URL at the correct hostname and re-run ` +
-            `post-build.sh so the registered URL is updated (docs/enclave-deploy-checklist.md).`
+            `post-build.sh so the registered URL is updated.`
         );
       }
     }
