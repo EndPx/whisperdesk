@@ -1,6 +1,6 @@
 # Architecture
 
-![WhisperDesk architecture](assets/architecture.svg)
+![WhisperDesk architecture](../assets/architecture.svg)
 
 WhisperDesk splits into five layers. Only the top layer ever knows what a trade actually is —
 everything below it just enforces rules against a signature and two proofs.
