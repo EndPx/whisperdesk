@@ -1,5 +1,7 @@
 # Flare Confidential Compute (FCC/FCE)
 
+![Registry-enforced routing](../../assets/fcc.svg)
+
 _Part of [Flare Integration](./README.md)._
 
 The desk itself runs inside a Flare Confidential Compute enclave (FCE) — this is where sealed RFQs

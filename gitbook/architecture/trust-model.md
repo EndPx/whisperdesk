@@ -1,5 +1,7 @@
 # Trust Model
 
+![Trust zones](../assets/trust-model.svg)
+
 WhisperDesk splits trust deliberately: the enclave is trusted for **secrecy only** — it never holds
 funds. Every settlement rule that matters is enforced onchain regardless of what the enclave does or
 claims.

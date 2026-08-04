@@ -1,5 +1,7 @@
 # Flare Data Connector (FDC)
 
+![FDC proof gates release](../../assets/fdc.svg)
+
 _Part of [Flare Integration](./README.md)._
 
 FDC is what turns "a payment happened on XRPL" into something a Coston2 contract can act on.

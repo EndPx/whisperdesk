@@ -1,5 +1,7 @@
 # FTSOv2
 
+![The price band, read twice](../../assets/ftsov2.svg)
+
 _Part of [Flare Integration](./README.md)._
 
 Price protection is the second onchain check, and it runs independently of whatever the enclave

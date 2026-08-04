@@ -1,5 +1,7 @@
 # FAssets / FXRP
 
+![Real-FXRP provenance](../../assets/fassets.svg)
+
 _Part of [Flare Integration](./README.md)._
 
 FXRP is the asset the whole DvP mechanism exists to move. Two things are true at once here, and both

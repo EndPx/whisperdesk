@@ -1,5 +1,7 @@
 # Flare Integration
 
+![Four load-bearing protocols](../../assets/flare-overview.svg)
+
 WhisperDesk is built on four Flare-native primitives, and each one carries load it cannot shed.
 Remove any one and the design collapses back into a public order book or a custodial box.
 
