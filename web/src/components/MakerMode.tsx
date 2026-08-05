@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ethers } from "ethers";
 import { BalanceRow, IconCheck, PartyCard, Rail, type PillSpec } from "@/components/flow/parts";
+import WithheldPanel, { MAKER_WITHHELD } from "@/components/WithheldPanel";
 import { useWalletAccount } from "@/lib/useWalletAccount";
 import {
   connect,
@@ -1034,6 +1035,15 @@ export default function MakerMode({
           </div>
         </div>
       </div>
+
+      {/* Stands for the whole run, not one step: the blindness is a property of the venue, and a
+          maker should be able to see the list of what they are not being told at any moment. */}
+      <WithheldPanel
+        title="The enclave withholds"
+        tagline="Blind by construction. Quote freely."
+        items={MAKER_WITHHELD}
+        footer="Not hidden by this screen — never sent to it. The enclave discloses a match only after it has signed one, and only to the two parties in it."
+      />
 
       {/* S1 */}
       <StepShell n={1} title="Connect wallet" done={!!address} active>

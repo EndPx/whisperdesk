@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BalanceRow, IconCheck, PartyCard, Rail, type PillSpec } from "@/components/flow/parts";
+import WithheldPanel, { TAKER_WITHHELD } from "@/components/WithheldPanel";
 import { useWalletAccount } from "@/lib/useWalletAccount";
 import {
   connect,
@@ -723,6 +724,16 @@ export default function WalletMode({
       </div>
 
       {/* S1 */}
+      {/* The taker's blindness is narrower than the maker's — they authored the order, so they know
+          their own side and size — but who is pricing them, and how many, stays inside the enclave
+          until it signs a match. Naming that explicitly is worth more than leaving it implied. */}
+      <WithheldPanel
+        title="The enclave withholds"
+        tagline="You set the terms. You never see who competes for them."
+        items={TAKER_WITHHELD}
+        footer="Not hidden by this screen — never sent to it. You learn a counterparty only once the enclave has signed the match that binds them to pay you."
+      />
+
       <StepShell n={1} title="Connect wallet" done={!!address} active>
         {!address ? (
           <>
