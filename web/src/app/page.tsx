@@ -5,6 +5,7 @@ import DvpFlow from "@/components/DvpFlow";
 import TrustModel from "@/components/TrustModel";
 import Proof from "@/components/Proof";
 import Footer from "@/components/Footer";
+import DeskCurtain from "@/components/DeskCurtain";
 
 export default function Home() {
   return (
@@ -18,6 +19,7 @@ export default function Home() {
         <Proof />
       </main>
       <Footer />
+      <DeskCurtain />
     </>
   );
 }

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { PartyCard, BalanceRow, Rail, type PillSpec, type Ring } from "@/components/flow/parts";
 import WalletMode from "@/components/WalletMode";
 import MakerMode from "@/components/MakerMode";
+import DeskEntry from "@/components/DeskEntry";
 import { detectProvider } from "@/lib/wallet-client";
 
 /* ---------------------------------------------------------------------------
@@ -147,6 +148,8 @@ export default function DemoConsole() {
   const [vaultFxrp, setVaultFxrp] = useState(0);
 
   const [mode, setMode] = useState<"one-click" | "wallet" | "maker">("wallet");
+  // The desk opens on a seat picker rather than dropping straight into a mode — see DeskEntry.
+  const [seated, setSeated] = useState(false);
   const [walletBusy, setWalletBusy] = useState(false);
   const [makerBusy, setMakerBusy] = useState(false);
 
@@ -676,6 +679,20 @@ npm run happy-path`}
       </div>
     </div>
   );
+
+  // Front door. Every hook above has already run, so this early return is safe — and the console
+  // below mounts unchanged once a seat is chosen.
+  if (!seated) {
+    return (
+      <DeskEntry
+        onPick={(role) => {
+          userPickedModeRef.current = true;
+          setMode(role);
+          setSeated(true);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="mt-10">
