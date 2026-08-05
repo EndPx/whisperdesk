@@ -28,3 +28,6 @@ sim*.jpeg
 
 # internal ops docs — kept local, not published (public docs live in the README + GitBook)
 docs/
+
+# Cygwin/Git-Bash crash dumps
+*.stackdump
