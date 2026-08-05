@@ -23,18 +23,23 @@
 import { ethers } from "ethers";
 import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import dotenv from "dotenv";
 
 dotenv.config({ path: new URL("../../.env", import.meta.url) });
 
 const RPC = process.env.COSTON2_RPC ?? "https://coston2-api.flare.network/ext/C/rpc";
+const EXT_PROXY = process.env.EXT_PROXY_URL ?? "https://fce.endpx.cloud";
 const SENDER = process.env.WD_SENDER ?? "0x56A903F408C4745D34354Ec230BbfBDD78eC6426";
 const ESCROW = process.env.ESCROW_ADDRESS ?? "0x20A885cb6ed3F652C5Fcb6a683CE74436F6a7023";
 const RELAY_FEE = 1_000_000n;
 const XRP_USD_FEED_ID = "0x015852502f55534400000000000000000000000000";
 
-const clientDir = process.argv[2] ?? "/root/wd-client";
-const WD = `${clientDir}/wd-client`;
+// Absolute, because execFileSync runs with cwd=clientDir and would otherwise resolve a relative
+// binary path against that new cwd rather than against where the script was invoked from. The
+// .exe suffix is needed on Windows: a full path is not extension-resolved.
+const clientDir = resolve(process.argv[2] ?? "/root/wd-client");
+const WD = join(clientDir, `wd-client${process.platform === "win32" ? ".exe" : ""}`);
 
 const provider = new ethers.JsonRpcProvider(RPC, 114);
 const deployer = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
@@ -47,10 +52,13 @@ const wd = (args) => execFileSync(WD, args, { cwd: clientDir, encoding: "utf8" }
 const sender = new ethers.Contract(
   SENDER,
   [
-    "function submitRfq(bytes ciphertext) payable returns (uint256)",
-    "function triggerMatch(bytes32 rfqId) payable returns (uint256)",
-    "event SealedRfqSubmitted(uint256 indexed instructionId, address indexed taker)",
-    "event MatchTriggered(uint256 indexed instructionId, bytes32 indexed rfqId)",
+    // Signatures copied from contracts/src/WhisperDeskInstructionSender.sol, not inferred:
+    // instructionId is bytes32 (not uint256) and MatchTriggered carries the caller as a third
+    // topic. Guessing either one makes parseLog silently skip the event.
+    "function submitRfq(bytes ciphertext) payable returns (bytes32)",
+    "function triggerMatch(bytes32 rfqId) payable returns (bytes32)",
+    "event SealedRfqSubmitted(bytes32 indexed instructionId, address indexed taker)",
+    "event MatchTriggered(bytes32 indexed instructionId, bytes32 indexed rfqId, address indexed caller)",
   ],
   deployer
 );
@@ -66,15 +74,28 @@ const escrow = new ethers.Contract(
   provider
 );
 
+// Polls the proxy over HTTP rather than through the binary — same implementation onchain-loop.mjs
+// has been using in production. wd-client's `result` subcommand exists but takes the id
+// positionally and cannot filter by submission tag, which the quote acks need.
 const pollResultTagged = async (id, tag = null, { timeoutMs = 300_000, everyMs = 5_000 } = {}) => {
+  const url = `${EXT_PROXY}/action/result/${id}` + (tag ? `?submissionTag=${tag}` : "");
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const out = wd(tag ? ["result", "-id", String(id), "-tag", tag] : ["result", "-id", String(id)]);
-    const parsed = JSON.parse(out);
-    if (parsed?.data?.data && parsed.data.data !== "0x") return parsed.data;
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+      if (res.ok) {
+        const body = await res.json();
+        // The proxy returns a `result` envelope as soon as the action is known, before the enclave
+        // has written a payload into it. Waiting only for `result` therefore races the enclave and
+        // hands back an empty `data` — so require the payload itself.
+        if (body?.result?.data && body.result.data !== "0x") return body.result;
+      }
+    } catch {
+      // transient — keep polling
+    }
     await new Promise((f) => setTimeout(f, everyMs));
   }
-  throw new Error(`timed out waiting for result ${id}`);
+  throw new Error(`timed out waiting for result ${id}${tag ? ` (tag ${tag})` : ""}`);
 };
 const payload = (r) => JSON.parse(Buffer.from(r.data.slice(2), "hex").toString());
 
@@ -156,17 +177,25 @@ async function main() {
   const takerLimit = (liveMid * 97n) / 100n;
 
   // --- 1. seal + submit the RFQ onchain ---------------------------------------------------------
+  // Field names are the enclave's wire contract (extension/fcewire/wire.go), not a convention:
+  // the taker's XRPL address is `xrplAddress`. An unknown key decodes to empty and the handler
+  // rejects the RFQ without ever emitting an ack, which looks exactly like a routing failure.
   const rfq = {
     v: 1,
     taker: taker.address,
     side: "SELL_FXRP",
     fxrpAmountRaw: minBlock.toString(),
     limitPriceUsdE18: takerLimit.toString(),
-    xrplTakerAddress: process.env.XRPL_TAKER_ADDRESS,
+    xrplAddress: process.env.XRPL_TAKER_ADDRESS,
   };
+  if (!rfq.xrplAddress) throw new Error("set XRPL_TAKER_ADDRESS — the enclave requires it");
   writeFileSync(`${clientDir}/rfq-competing.json`, JSON.stringify(rfq, null, 2) + "\n");
   const ciphertext = wd(["encrypt", "@rfq-competing.json"]);
-  const rfqTx = await sender.submitRfq(ciphertext, { value: RELAY_FEE });
+  // Submitted BY the taker, not the relayer. WhisperDeskInstructionSender stamps the taker from
+  // msg.sender, and the enclave requires the payload's `taker` to equal that envelope sender —
+  // submitting from any other wallet is rejected as WD_ERR_AUTH. That check is the whole point of
+  // the onchain ingress: identity cannot be self-asserted.
+  const rfqTx = await sender.connect(taker).submitRfq(ciphertext, { value: RELAY_FEE });
   const rfqRc = await rfqTx.wait();
   const ev = rfqRc.logs
     .map((l) => {
@@ -179,7 +208,10 @@ async function main() {
     .find((p) => p?.name === "SealedRfqSubmitted");
   if (!ev) throw new Error("SealedRfqSubmitted not emitted");
   const rfqId = ev.args.instructionId;
-  log(`RFQ ${rfqId} — tx ${rfqTx.hash}`);
+  if (ev.args.taker.toLowerCase() !== taker.address.toLowerCase()) {
+    throw new Error(`taker stamped onchain (${ev.args.taker}) != our taker — sender binding broken`);
+  }
+  log(`RFQ ${rfqId} — tx ${rfqTx.hash} (taker bound onchain: ${ev.args.taker})`);
   const ack = payload(await pollResultTagged(rfqId));
   log(`  window ends ${ack.windowEndsAt}`);
 
