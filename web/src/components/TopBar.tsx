@@ -1,11 +1,14 @@
 import Link from "next/link";
 import Logo from "@/components/Logo";
 
+// Labelled by what the reader gets, not by what the section is made of. "Product" and "Flow"
+// described our own structure; "Why" and "How it settles" answer the questions a visitor
+// actually arrives with.
 const NAV = [
-  { label: "Product", href: "/#without-with" },
-  { label: "Flow", href: "/#flow" },
-  { label: "Trust", href: "/#trust" },
-  { label: "Proof", href: "/#proof" },
+  { label: "Why", href: "/#without-with" },
+  { label: "How it settles", href: "/#flow" },
+  { label: "Trust model", href: "/#trust" },
+  { label: "Receipts", href: "/#proof" },
 ];
 
 export default function TopBar() {
@@ -26,11 +29,13 @@ export default function TopBar() {
             </Link>
           ))}
         </nav>
+        {/* Primary, not a bordered afterthought: once a visitor has scrolled past the hero this
+            is the only door to the live demo, so it must outweigh the section links beside it. */}
         <Link
           href="/demo"
-          className="mono-label text-[0.68rem] px-4 py-2 border border-steel-line-2 text-ink-2 hover:text-ink hover:border-ice-deep/60 transition-colors duration-300"
+          className="mono-label text-[0.68rem] px-4 py-2.5 bg-ice text-vault-0 hover:bg-ice-deep hover:text-ink transition-colors duration-300 shrink-0"
         >
-          See it settle
+          Enter the desk
         </Link>
       </div>
     </header>

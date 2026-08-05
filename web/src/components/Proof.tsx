@@ -1,47 +1,64 @@
 const EXPLORER = "https://coston2-explorer.flare.network";
 
-type Receipt = {
-  label: string;
-  detail: string;
-  tx?: string;
-  href?: string;
+/**
+ * The receipts, reorganised around WHAT EACH ONE PROVES.
+ *
+ * The previous version was six tiles of hashes and short mechanical labels. A judge could see
+ * that transactions existed but not what they established — the burden of translating
+ * "ecrecover == 0x5656…" into "nobody self-signed this" was left to the reader. Each card now
+ * leads with the guarantee in plain English, carries a "Proven live" badge, and only then shows
+ * the transaction that backs it.
+ */
+type Guarantee = {
+  id: string;
+  kicker: string;
+  claim: string;
+  body: string;
+  badge: string;
+  tx: string;
+  href: string;
 };
 
-const RECEIPTS: Receipt[] = [
+const GUARANTEES: Guarantee[] = [
   {
-    label: "enclave-signed lock() — nothing self-signed",
-    detail: "ecrecover == live enclave 0x5656…c18B",
+    id: "P1",
+    kicker: "No self-signing",
+    claim: "Nothing here is signed by us",
+    body:
+      "The instruction that moved the funds was signed inside the enclave with its own key, and the escrow recovered that signature on-chain before touching anything. The desk cannot forge a match for itself.",
+    badge: "lock() accepted the enclave's signature",
     tx: "0x58ec…d1db",
     href: `${EXPLORER}/tx/0x58ec0e5e8e7b4e8ec85b86be863c62565a1292c210420e36b5f382196de5d1db`,
   },
   {
-    label: "enclave loop · release() → maker got FXRP",
-    detail: "sealed RFQ → TEE match → FDC proof → settled ✓",
+    id: "P2",
+    kicker: "Cross-chain DvP",
+    claim: "Delivery only against proven payment",
+    body:
+      "FXRP is released when — and only when — the Flare Data Connector proves the exact XRPL payment landed before the deadline. The two legs live on chains that cannot see each other, so the proof is the only bridge between them.",
+    badge: "release() after a fresh FDC proof",
     tx: "0xb6b0…dfad",
     href: `${EXPLORER}/tx/0xb6b01c627771323542db03e7a911026139aa1e5a4e81c65dfd08866e21cbdfad`,
   },
   {
-    label: "XRPL payment",
-    detail: "tesSUCCESS",
-    tx: "097B23FD…BAA6",
-    href: "https://testnet.xrpl.org/transactions/097B23FD6F4C3FF6740A956838A180C29950DD3E05343786E95930116B18BAA6",
-  },
-  {
-    label: "FDC proof",
-    detail: "XRPPayment · status 0 · bound to escrow",
-    href: `${EXPLORER}/address/0x5f32783D629E2acBb83f16628ad76D02A26CFB9B`,
-  },
-  {
-    label: "release() → maker received FXRP",
-    detail: "settled ✓",
-    tx: "0x2c16…202f",
-    href: `${EXPLORER}/tx/0x2c162613abea611d7b09c50251b35936b6d7c8599daea17016d952591a17202f`,
-  },
-  {
-    label: "default path · refund() → taker",
-    detail: "principal + 1% slashed bond · settled ✓",
+    id: "P3",
+    kicker: "Default path",
+    claim: "A no-show costs the maker, not the taker",
+    body:
+      "If the XRP never arrives, the taker gets their principal back plus the maker's slashed 1% bond. The failure path is a designed outcome that settles — not an error that strands funds.",
+    badge: "refund() paid principal + slashed bond",
     tx: "0x1605…feed",
     href: `${EXPLORER}/tx/0x1605a2ced9852f9caefebf6339cac3d294758f9d5e30c968208d2a4c0cc1feed`,
+  },
+  {
+    id: "P4",
+    kicker: "Real asset",
+    claim: "The same machinery settles genuine FXRP",
+    body:
+      "One settlement ran against FAssets-minted FXRP that we minted ourselves through the protocol, from our own XRP into the Core Vault. The interactive demo keeps a mintable stand-in only because a faucet cannot conjure the real token for every visitor.",
+    badge: "real FXRP released to the maker",
+    tx: "0x9ea7…aea3",
+    href: `${EXPLORER}/tx/0x9ea70cafebbf0e6b937216af9cea374d798e6eb0466b7104fe40fd7e256aaea3`,
   },
 ];
 
@@ -57,48 +74,44 @@ export default function Proof() {
   return (
     <section id="proof" className="py-20 sm:py-28">
       <div className="mx-auto max-w-[1120px] px-6 sm:px-8">
-        <p className="mono-label text-[0.72rem] text-ink-3 mb-4">The receipts</p>
+        <p className="mono-label text-[0.72rem] text-ink-3 mb-4">What we prove, live</p>
         <h2 className="font-display font-semibold text-[1.9rem] sm:text-[2.4rem] leading-[1.12] tracking-tight max-w-2xl text-balance mb-5">
           Not a mockup — it settled on-chain.
         </h2>
 
-        <p className="max-w-[62ch] text-[0.95rem] leading-[1.7] text-ink-2 mb-14">
-          Every receipt below is a real transaction — signed by the live enclave, verified by the
-          real FDC, settled on real Coston2. The token changing hands is MockFXRP, a mintable
-          Coston2 test asset, not FAssets-minted FXRP: the escrow, the proof check, and the bond
-          slashing around it are the real machinery; the asset is a stand-in until there is FXRP
-          liquidity worth proving this against.
+        <p className="max-w-[58ch] text-[0.95rem] leading-[1.7] text-ink-2 mb-12">
+          Four guarantees, each backed by a transaction you can open. Signed by the live enclave,
+          verified by the real Flare Data Connector, settled on real Coston2 and XRPL testnet.
         </p>
 
-        <div className="grid gap-px bg-steel-line sm:grid-cols-2">
-          {RECEIPTS.map((r) => {
-            const body = (
-              <>
-                <p className="mono-label text-[0.66rem] text-ink-3 mb-3">{r.label}</p>
-                <p className="mono-data text-[0.85rem] text-ice mb-2">{r.detail}</p>
-                {r.tx && (
-                  <p className="mono-data text-[0.78rem] text-ink-2">
-                    tx <span className="text-ink">{r.tx}</span>
-                  </p>
-                )}
-              </>
-            );
-            return r.href ? (
-              <a
-                key={r.label}
-                href={r.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="bg-vault-2 p-7 sm:p-8 panel-hover block"
-              >
-                {body}
-              </a>
-            ) : (
-              <div key={r.label} className="bg-vault-2 p-7 sm:p-8 panel-hover block">
-                {body}
+        <div className="grid gap-5 sm:grid-cols-2">
+          {GUARANTEES.map((g) => (
+            <a
+              key={g.id}
+              href={g.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="panel panel-hover flex flex-col p-7 sm:p-8 group"
+            >
+              <p className="mono-label text-[0.6rem] text-ice mb-3">
+                {g.id} · {g.kicker}
+              </p>
+              <p className="font-display font-semibold text-[1.15rem] leading-snug tracking-tight text-ink mb-3 text-balance">
+                {g.claim}
+              </p>
+              <p className="text-[0.9rem] leading-[1.65] text-ink-2 mb-6">{g.body}</p>
+
+              <div className="mt-auto pt-5 border-t border-steel-line flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                <span className="mono-label text-[0.56rem] text-ink-3 flex items-center gap-2">
+                  <span className="ice-dot shrink-0" />
+                  Proven live · {g.badge}
+                </span>
+                <span className="mono-data text-[0.74rem] text-ink-2 group-hover:text-ice transition-colors duration-300">
+                  {g.tx}
+                </span>
               </div>
-            );
-          })}
+            </a>
+          ))}
         </div>
 
         <div className="mt-6 panel px-7 py-5 sm:px-8">
