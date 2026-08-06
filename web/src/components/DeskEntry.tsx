@@ -1,5 +1,9 @@
 "use client";
 
+import { useCallback, useState } from "react";
+import { connect, ensureCoston2 } from "@/lib/wallet-client";
+import { useWalletAccount } from "@/lib/useWalletAccount";
+
 export type DeskRole = "one-click" | "wallet" | "maker";
 
 /**
@@ -86,11 +90,48 @@ function RedactedBlocks({ count }: { count: number }) {
 }
 
 export default function DeskEntry({ onPick }: { onPick: (role: DeskRole) => void }) {
+  // The wallet is asked for at the door rather than inside the seat. Entering a wallet seat without
+  // one used to drop you on a bare "No wallet detected." panel — no rail, no price, no way forward
+  // except back — and that dead end was one click from the front page. Connecting here means a seat
+  // is only ever entered in a state it can actually run in.
+  const { hasProvider, address, setAddress } = useWalletAccount();
+  const [connecting, setConnecting] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
+
+  const handleConnect = useCallback(async () => {
+    setConnecting(true);
+    setConnectError(null);
+    try {
+      const addr = await connect();
+      // Same order the seats themselves used: authorize, then move the wallet to Coston2, so a
+      // judge never signs the first transaction against whatever chain they happened to be on.
+      await ensureCoston2();
+      setAddress(addr);
+    } catch (err) {
+      setConnectError(err instanceof Error ? err.message : "could not connect");
+    } finally {
+      setConnecting(false);
+    }
+  }, [setAddress]);
+
   return (
     <div className="mt-10">
+      {address && (
+        <div className="panel px-5 py-3 mb-5 flex items-center justify-between gap-3">
+          <p className="mono-label text-[0.56rem] text-ink-3">Wallet connected · Coston2</p>
+          <p className="mono-data text-[0.7rem] text-ink" title={address}>
+            {`${address.slice(0, 6)}…${address.slice(-4)}`}
+          </p>
+        </div>
+      )}
+
       <div className="grid gap-5 lg:grid-cols-3">
         {SEATS.map((s) => {
           const accentText = s.accent === "ice" ? "text-ice" : "text-[#e0a33b]";
+          // The one-click seat runs on the desk's own keys and needs nothing from the visitor.
+          const needsWallet = s.role !== "one-click";
+          const blocked = needsWallet && hasProvider === false;
+          const mustConnect = needsWallet && hasProvider !== false && !address;
           return (
             <div key={s.role} className="panel flex flex-col p-7">
               <p className={`mono-label text-[0.58rem] ${accentText}`}>{s.tag}</p>
@@ -120,15 +161,32 @@ export default function DeskEntry({ onPick }: { onPick: (role: DeskRole) => void
 
               <button
                 type="button"
-                onClick={() => onPick(s.role)}
-                className={`mono-label text-[0.64rem] mt-6 w-full px-4 py-3 transition-colors duration-300 ${
+                onClick={blocked ? undefined : mustConnect ? handleConnect : () => onPick(s.role)}
+                disabled={blocked || (mustConnect && connecting)}
+                className={`mono-label text-[0.64rem] mt-6 w-full px-4 py-3 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none ${
                   s.role === "one-click"
                     ? "bg-ice text-vault-0 hover:bg-ice-deep hover:text-ink"
                     : "border border-steel-line-2 text-ink-2 hover:text-ink hover:border-ice-deep/60"
                 }`}
               >
-                {s.cta}
+                {blocked
+                  ? "No wallet in this browser"
+                  : mustConnect
+                    ? connecting
+                      ? "Connecting…"
+                      : "Connect MetaMask to enter"
+                    : s.cta}
               </button>
+
+              {blocked && (
+                <p className="mono-label text-[0.52rem] text-ink-3 mt-2.5 leading-relaxed">
+                  This seat signs its own transactions. The no-setup seat settles for real without
+                  one.
+                </p>
+              )}
+              {mustConnect && connectError && (
+                <p className="mono-label text-[0.52rem] text-iron-red mt-2.5">{connectError}</p>
+              )}
             </div>
           );
         })}
