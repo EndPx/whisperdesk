@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ethers } from "ethers";
 import { BalanceRow, IconCheck, PartyCard, Rail, type PillSpec } from "@/components/flow/parts";
 import WithheldPanel, { MAKER_WITHHELD } from "@/components/WithheldPanel";
+import Holdings from "@/components/Holdings";
 import { useWalletAccount } from "@/lib/useWalletAccount";
 import {
   connect,
@@ -404,19 +405,20 @@ export default function MakerMode({
   const paymentExpired =
     s6Stage !== "done" && paymentRemainingSeconds !== null && paymentRemainingSeconds <= 0;
 
-  const currentStep = !address
-    ? 1
-    : !faucetDone
-      ? 2
+  // Funding is no longer a numbered step, but it still gates: without FXRP there is no bond, so an
+  // unfunded maker holds at step 1. The Holdings card carries the mint, so nothing is unreachable.
+  const currentStep =
+    !address || !faucetDone
+      ? 1
       : s3Stage !== "done"
-        ? 3
+        ? 2
         : !quoteAccepted
-          ? 4
+          ? 3
           : !matchId
-            ? 5
+            ? 4
             : s6Stage !== "done"
-              ? 6
-              : 7;
+              ? 5
+              : 6;
 
   const makerBusy =
     connecting ||
@@ -1102,6 +1104,28 @@ export default function MakerMode({
         footer="Not hidden by this screen — never sent to it. The enclave discloses a match only after it has signed one, and only to the two parties in it."
       />
 
+      {/* Holdings sits above the steps and outlives all of them. Funding is wallet state, not a
+          stage of the trade — as a numbered step it read like something the maker had to negotiate,
+          when in truth the desk pays for all of it. */}
+      {address && (
+        <Holdings
+          address={address}
+          fxrp={fxrp}
+          c2flr={c2flr}
+          freeBond={freeBond}
+          onFaucet={handleFaucet}
+          faucetBusy={faucetBusy}
+          faucetDone={faucetDone}
+          faucetError={faucetError}
+          onGas={handleGas}
+          gasBusy={gasBusy}
+          gasError={gasError}
+          /* Threshold, not zero: dust is as unspendable as an empty wallet, and it matches the
+             route's GAS_ENOUGH_WEI so the button never offers a drip that would be skipped. */
+          needsGas={toNum(c2flr) < 0.1}
+        />
+      )}
+
       {/* S1 */}
       <StepShell n={1} title="Connect wallet" done={!!address} active>
         {!address ? (
@@ -1117,72 +1141,20 @@ export default function MakerMode({
             {connectError && <p className="mono-label text-[0.64rem] text-iron-red mt-3">{connectError}</p>}
           </>
         ) : (
-          <div className="space-y-1.5">
-            <p className="mono-data text-[0.85rem] text-ink">
-              <span className="text-ink-3">Address </span>
-              {shortHash(address)}
-            </p>
-            <p className="mono-data text-[0.85rem] text-ink">
-              <span className="text-ink-3">C2FLR gas </span>
-              {c2flr}
-            </p>
-            <p className="mono-data text-[0.85rem] text-ink">
-              <span className="text-ink-3">Free bond </span>
-              {freeBond}
-            </p>
-            {/* Threshold, not zero: dust is as unspendable as an empty wallet, and it matches the
-                route's own GAS_ENOUGH_WEI so the button never appears for a drip that gets skipped. */}
-            {toNum(c2flr) < 0.1 && (
-              <div className="mt-2 space-y-1.5">
-                <button
-                  type="button"
-                  onClick={handleGas}
-                  disabled={gasBusy}
-                  className="mono-label text-[0.62rem] px-3 py-1.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
-                >
-                  {/* No amount in the label: the drip size lives in wallet-mode.ts and this is a
-                      client component, so a number here would be a copy that silently goes stale. */}
-                  {gasBusy ? "Sending…" : "Send me gas"}
-                </button>
-                {gasError && <p className="mono-label text-[0.6rem] text-iron-red">{gasError}</p>}
-                <a
-                  href="https://faucet.flare.network"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mono-label text-[0.58rem] text-ink-3 hover:text-ice hover:underline block"
-                >
-                  or use faucet.flare.network
-                </a>
-              </div>
-            )}
-          </div>
-        )}
-      </StepShell>
-
-      {/* S2 */}
-      <StepShell n={2} title="Get demo FXRP for the bond" done={faucetDone} active={currentStep >= 2}>
-        {!faucetDone ? (
-          <>
-            <button
-              type="button"
-              onClick={handleFaucet}
-              disabled={faucetBusy || currentStep < 2}
-              className="mono-label text-[0.68rem] px-5 py-2.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
-            >
-              {faucetBusy ? "Minting…" : "Mint 2 demo FXRP"}
-            </button>
-            {faucetError && <p className="mono-label text-[0.64rem] text-iron-red mt-3">{faucetError}</p>}
-          </>
-        ) : (
           <p className="mono-data text-[0.85rem] text-ink">
-            <span className="text-ink-3">FXRP balance </span>
-            {fxrp}
+            <span className="text-ink-3">Connected </span>
+            {shortHash(address)}
+            {!faucetDone && (
+              <span className="mono-label text-[0.58rem] text-ink-3 block mt-2">
+                Mint your demo FXRP in Holdings above — the bond is posted from it.
+              </span>
+            )}
           </p>
         )}
       </StepShell>
 
-      {/* S3 */}
-      <StepShell n={3} title="Open an RFQ to quote against" done={s3Stage === "done"} active={currentStep >= 3}>
+      {/* S2 */}
+      <StepShell n={2} title="Open an RFQ to quote against" done={s3Stage === "done"} active={currentStep >= 2}>
         {s3Stage !== "done" ? (
           <div className="space-y-4">
             {rfqData && (
@@ -1213,7 +1185,7 @@ export default function MakerMode({
                       ? () => runDepositBond(rfqData!)
                       : undefined
               }
-              disabled={currentStep < 3 || (s3Stage !== "idle" && !s3Error)}
+              disabled={currentStep < 2 || (s3Stage !== "idle" && !s3Error)}
               className="mono-label text-[0.68rem] px-5 py-2.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
             >
               {s3Stage === "idle"
@@ -1259,8 +1231,8 @@ export default function MakerMode({
         )}
       </StepShell>
 
-      {/* S4 */}
-      <StepShell n={4} title="Quote it" done={quoteAccepted} active={currentStep >= 4}>
+      {/* S3 */}
+      <StepShell n={3} title="Quote it" done={quoteAccepted} active={currentStep >= 3}>
         {noMatchReasons && (
           <div className="mb-4 border border-steel-line-2 bg-vault-2 px-4 py-3">
             <p className="mono-label text-[0.6rem] text-ink-3 mb-1.5">No match — not an error, re-quote below</p>
@@ -1285,7 +1257,7 @@ export default function MakerMode({
             <button
               type="button"
               onClick={refreshFtsoMid}
-              disabled={ftsoBusy || currentStep < 4}
+              disabled={ftsoBusy || currentStep < 3}
               className="mono-label text-[0.56rem] text-ice hover:underline disabled:opacity-30 disabled:pointer-events-none"
             >
               refresh
@@ -1305,7 +1277,7 @@ export default function MakerMode({
                 type="text"
                 value={priceInput}
                 onChange={(e) => setPriceInput(e.target.value)}
-                disabled={currentStep < 4}
+                disabled={currentStep < 3}
                 className="mono-data text-[0.82rem] bg-vault-2 border border-steel-line px-3 py-2 text-ink w-[160px] disabled:opacity-40"
               />
             </label>
@@ -1315,14 +1287,14 @@ export default function MakerMode({
                 type="text"
                 value={maxFxrpInput}
                 onChange={(e) => setMaxFxrpInput(e.target.value)}
-                disabled={currentStep < 4}
+                disabled={currentStep < 3}
                 className="mono-data text-[0.82rem] bg-vault-2 border border-steel-line px-3 py-2 text-ink w-[160px] disabled:opacity-40"
               />
             </label>
             <button
               type="button"
               onClick={runQuote}
-              disabled={currentStep < 4 || !priceInput || (s4Stage !== "idle" && s4Stage !== "done" && !s4Error)}
+              disabled={currentStep < 3 || !priceInput || (s4Stage !== "idle" && s4Stage !== "done" && !s4Error)}
               className="mono-label text-[0.68rem] px-5 py-2.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
             >
               {s4Stage === "signing"
@@ -1343,14 +1315,14 @@ export default function MakerMode({
         </div>
       </StepShell>
 
-      {/* S5 */}
-      <StepShell n={5} title="Match" done={!!matchId} active={currentStep >= 5}>
+      {/* S4 */}
+      <StepShell n={4} title="Match" done={!!matchId} active={currentStep >= 4}>
         {!matchId ? (
           <div className="space-y-3">
             <button
               type="button"
               onClick={runMatch}
-              disabled={currentStep < 5 || matching}
+              disabled={currentStep < 4 || matching}
               className="mono-label text-[0.68rem] px-5 py-2.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
             >
               {matching ? "Asking the enclave to match…" : "Trigger matching"}
@@ -1364,9 +1336,9 @@ export default function MakerMode({
         )}
       </StepShell>
 
-      {/* S6 */}
-      <StepShell n={6} title="Pay the XRP leg" done={s6Stage === "done"} active={currentStep >= 6}>
-        {currentStep >= 6 && s6Stage !== "done" && (
+      {/* S5 */}
+      <StepShell n={5} title="Pay the XRP leg" done={s6Stage === "done"} active={currentStep >= 5}>
+        {currentStep >= 5 && s6Stage !== "done" && (
           <div className="space-y-4">
             <div className="space-y-1.5 border border-steel-line bg-vault-2 px-4 py-3.5">
               <p className="mono-data text-[0.85rem] text-ink break-all">
@@ -1485,8 +1457,8 @@ export default function MakerMode({
         )}
       </StepShell>
 
-      {/* S7 */}
-      <StepShell n={7} title="Watch settlement" done={s7Stage === "done"} active={currentStep >= 7}>
+      {/* S6 */}
+      <StepShell n={6} title="Watch settlement" done={s7Stage === "done"} active={currentStep >= 6}>
         {s7Stage !== "done" ? (
           <div className="space-y-3">
             <button
@@ -1502,7 +1474,7 @@ export default function MakerMode({
                         ? () => runRelease(proofData)
                         : undefined
               }
-              disabled={currentStep < 7 || (s7Stage !== "idle" && !s7Error)}
+              disabled={currentStep < 6 || (s7Stage !== "idle" && !s7Error)}
               className="mono-label text-[0.68rem] px-5 py-2.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
             >
               {s7Stage === "idle" && !s7Error

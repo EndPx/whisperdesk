@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BalanceRow, IconCheck, PartyCard, Rail, type PillSpec } from "@/components/flow/parts";
+import Holdings from "@/components/Holdings";
 import WithheldPanel, { TAKER_WITHHELD } from "@/components/WithheldPanel";
 import { useWalletAccount } from "@/lib/useWalletAccount";
 import {
@@ -248,7 +249,11 @@ export default function WalletMode({
     ]);
   }, []);
 
-  const currentStep = !address ? 1 : !faucetDone ? 2 : !xrplAddress ? 3 : s4Stage !== "done" ? 4 : 5;
+  // Funding is no longer a numbered step, but it still gates: an unfunded wallet holds the flow at
+  // step 1 rather than advancing into a trade it cannot pay for. The Holdings card carries the
+  // action, so nothing is unreachable while this sits at 1.
+  const currentStep =
+    !address || !faucetDone ? 1 : !xrplAddress ? 2 : s4Stage !== "done" ? 3 : 4;
 
   const walletBusy =
     connecting ||
@@ -791,6 +796,28 @@ export default function WalletMode({
         footer="Not hidden by this screen — never sent to it. You learn a counterparty only once the enclave has signed the match that binds them to pay you."
       />
 
+      {/* Holdings sits above the steps and outlives all of them. Funding is wallet state, not a
+          stage of the trade — as a numbered step it read like something the judge had to negotiate,
+          when in truth the desk pays for all of it. */}
+      {address && (
+        <Holdings
+          address={address}
+          fxrp={fxrp}
+          c2flr={c2flr}
+          xrp={xrplBalance}
+          onFaucet={handleFaucet}
+          faucetBusy={faucetBusy}
+          faucetDone={faucetDone}
+          faucetError={faucetError}
+          onGas={handleGas}
+          gasBusy={gasBusy}
+          gasError={gasError}
+          /* Threshold, not zero: dust is as unspendable as an empty wallet, and it matches the
+             route's GAS_ENOUGH_WEI so the button never offers a drip that would be skipped. */
+          needsGas={toNum(c2flr) < 0.1}
+        />
+      )}
+
       <StepShell n={1} title="Connect wallet" done={!!address} active>
         {!address ? (
           <>
@@ -805,68 +832,20 @@ export default function WalletMode({
             {connectError && <p className="mono-label text-[0.64rem] text-iron-red mt-3">{connectError}</p>}
           </>
         ) : (
-          <div className="space-y-1.5">
-            <p className="mono-data text-[0.85rem] text-ink">
-              <span className="text-ink-3">Address </span>
-              {shortHash(address)}
-            </p>
-            <p className="mono-data text-[0.85rem] text-ink">
-              <span className="text-ink-3">C2FLR gas </span>
-              {c2flr}
-            </p>
-            {/* Threshold, not zero: dust is as unspendable as an empty wallet, and it matches the
-                route's own GAS_ENOUGH_WEI so the button never appears for a drip that gets skipped. */}
-            {toNum(c2flr) < 0.1 && (
-              <div className="mt-2 space-y-1.5">
-                <button
-                  type="button"
-                  onClick={handleGas}
-                  disabled={gasBusy}
-                  className="mono-label text-[0.62rem] px-3 py-1.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
-                >
-                  {/* No amount in the label: the drip size lives in wallet-mode.ts and this is a
-                      client component, so a number here would be a copy that silently goes stale. */}
-                  {gasBusy ? "Sending…" : "Send me gas"}
-                </button>
-                {gasError && <p className="mono-label text-[0.6rem] text-iron-red">{gasError}</p>}
-                <a
-                  href="https://faucet.flare.network"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mono-label text-[0.58rem] text-ink-3 hover:text-ice hover:underline block"
-                >
-                  or use faucet.flare.network
-                </a>
-              </div>
-            )}
-          </div>
-        )}
-      </StepShell>
-
-      {/* S2 */}
-      <StepShell n={2} title="Get demo FXRP" done={faucetDone} active={currentStep >= 2}>
-        {!faucetDone ? (
-          <>
-            <button
-              type="button"
-              onClick={handleFaucet}
-              disabled={faucetBusy || currentStep < 2}
-              className="mono-label text-[0.68rem] px-5 py-2.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
-            >
-              {faucetBusy ? "Minting…" : "Mint 2 demo FXRP"}
-            </button>
-            {faucetError && <p className="mono-label text-[0.64rem] text-iron-red mt-3">{faucetError}</p>}
-          </>
-        ) : (
           <p className="mono-data text-[0.85rem] text-ink">
-            <span className="text-ink-3">FXRP balance </span>
-            {fxrp}
+            <span className="text-ink-3">Connected </span>
+            {shortHash(address)}
+            {!faucetDone && (
+              <span className="mono-label text-[0.58rem] text-ink-3 block mt-2">
+                Mint your demo FXRP in Holdings above to continue.
+              </span>
+            )}
           </p>
         )}
       </StepShell>
 
-      {/* S3 */}
-      <StepShell n={3} title="XRPL receive address" done={!!xrplAddress} active={currentStep >= 3}>
+      {/* S2 */}
+      <StepShell n={2} title="XRPL receive address" done={!!xrplAddress} active={currentStep >= 2}>
         {!xrplAddress ? (
           <div className="space-y-4">
             {/* Generate goes FIRST. Most judges have no XRPL testnet address, so this is the path
@@ -929,14 +908,14 @@ export default function WalletMode({
         )}
       </StepShell>
 
-      {/* S4 */}
-      <StepShell n={4} title="Prepare + wallet confirmations" done={s4Stage === "done"} active={currentStep >= 4}>
+      {/* S3 */}
+      <StepShell n={3} title="Prepare + wallet confirmations" done={s4Stage === "done"} active={currentStep >= 3}>
         {s4Stage !== "done" ? (
           <div className="space-y-3">
             <button
               type="button"
               onClick={s4Stage === "idle" ? runPrepare : s4Stage === "approve" ? () => runApprove(prepareData!) : s4Stage === "deposit" ? () => runDeposit(prepareData!) : s4Stage === "lock" ? () => runLock(prepareData!) : undefined}
-              disabled={currentStep < 4 || (s4Stage !== "idle" && !s4Error)}
+              disabled={currentStep < 3 || (s4Stage !== "idle" && !s4Error)}
               className="mono-label text-[0.68rem] px-5 py-2.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
             >
               {s4Stage === "idle"
@@ -972,8 +951,8 @@ export default function WalletMode({
         )}
       </StepShell>
 
-      {/* S5 */}
-      <StepShell n={5} title="Watch settlement" done={s5Stage === "done"} active={currentStep >= 5}>
+      {/* S4 */}
+      <StepShell n={4} title="Watch settlement" done={s5Stage === "done"} active={currentStep >= 4}>
         {s5Stage !== "done" ? (
           <div className="space-y-3">
             <button
@@ -991,7 +970,7 @@ export default function WalletMode({
                           ? () => runRelease(proofData)
                           : undefined
               }
-              disabled={currentStep < 5 || (s5Stage !== "idle" && !s5Error)}
+              disabled={currentStep < 4 || (s5Stage !== "idle" && !s5Error)}
               className="mono-label text-[0.68rem] px-5 py-2.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
             >
               {s5Stage === "idle" && !s5Error
