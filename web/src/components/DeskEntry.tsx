@@ -192,10 +192,13 @@ export default function DeskEntry({ onPick }: { onPick: (role: DeskRole) => void
         })}
       </div>
 
+      {/* This used to claim that opening a second window matched two outside parties against each
+          other. It does not: /api/maker/open-rfq has the desk act as taker, and wallet mode has it
+          act as maker, so the two seats never meet. Say what actually happens instead. */}
       <p className="mono-label text-[0.54rem] text-ink-3 mt-4 max-w-[80ch] leading-snug">
-        All three run a real lock → pay → attest → release on Coston2 + XRPL testnet. Open the maker
-        seat in a second window to watch two independent parties get matched without either seeing
-        the other&apos;s order.
+        All three run a real lock → pay → attest → release on Coston2 + XRPL testnet. The desk takes
+        the other side of whichever seat you pick — maker when you take, taker when you make — so the
+        keys, the signature and the payment on your side are genuinely yours.
       </p>
     </div>
   );

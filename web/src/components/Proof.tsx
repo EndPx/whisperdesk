@@ -62,12 +62,35 @@ const GUARANTEES: Guarantee[] = [
   },
 ];
 
-const STATS = [
-  "117/117 tests green",
-  "enclave signer 0x5656…c18B",
-  "enclave escrow 0x20A8…7023",
-  "FCE extension 0x…010069",
-  "live at fce.endpx.cloud",
+// Every figure here names something a reader can go and check, so every figure links to it. As
+// plain text they read like claims about addresses rather than pointers to them — the opposite of
+// what this section exists to do.
+const STATS: { label: string; href: string; title: string }[] = [
+  {
+    label: "117/117 tests green",
+    href: "https://github.com/EndPx/whisperdesk/tree/main/contracts/test",
+    title: "The contract suite: unit, fuzz/invariant, and two that fork Coston2",
+  },
+  {
+    label: "enclave signer 0x5656…c18B",
+    href: `${EXPLORER}/address/0x56564F61588bB110E0712c3938aDa4338e6cc18B`,
+    title: "The key the enclave signs MatchInstructions with — held only inside the TEE",
+  },
+  {
+    label: "enclave escrow 0x20A8…7023",
+    href: `${EXPLORER}/address/0x20A885cb6ed3F652C5Fcb6a683CE74436F6a7023`,
+    title: "The DvPEscrow whose teeSigner is that enclave key",
+  },
+  {
+    label: "FCE extension 0x…010069",
+    href: `${EXPLORER}/address/0x0000000000000000000000000000000000010069`,
+    title: "Extension 65641 — the registry that routes instructions to our TEE machine",
+  },
+  {
+    label: "live at fce.endpx.cloud",
+    href: "https://fce.endpx.cloud/info",
+    title: "The running enclave — returns its signed TeeInfo on every request",
+  },
 ];
 
 export default function Proof() {
@@ -117,9 +140,16 @@ export default function Proof() {
         <div className="mt-6 panel px-7 py-5 sm:px-8">
           <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
             {STATS.map((s) => (
-              <span key={s} className="mono-data text-[0.78rem] text-ink-2">
-                {s}
-              </span>
+              <a
+                key={s.label}
+                href={s.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={s.title}
+                className="mono-data text-[0.78rem] text-ink-2 hover:text-ice hover:underline underline-offset-4 transition-colors duration-300"
+              >
+                {s.label}
+              </a>
             ))}
           </div>
         </div>
