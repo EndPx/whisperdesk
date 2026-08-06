@@ -18,7 +18,21 @@
    one.
 --------------------------------------------------------------------------- */
 
+import { useEffect, useState } from "react";
+
 export type HoldingToken = "FXRP" | "XRP" | "C2FLR";
+
+/** Only the XRP-denominated assets carry a value. C2FLR is testnet gas — pricing it would invent a
+ *  market that does not exist, and the one number on this panel that isn't real would undermine
+ *  every number that is. */
+const PRICED: HoldingToken[] = ["FXRP", "XRP"];
+
+function usd(amount: string | null, xrpUsd: number | null): string | null {
+  if (amount === null || xrpUsd === null) return null;
+  const n = Number(amount);
+  if (!Number.isFinite(n)) return null;
+  return (n * xrpUsd).toLocaleString(undefined, { style: "currency", currency: "USD" });
+}
 
 /** Palette per asset. FXRP takes the desk's ice because it is the asset being traded; XRP the
  *  neutral steel of the payment leg; C2FLR an amber that reads as "fuel", not "position". */
@@ -63,7 +77,16 @@ export function TokenMark({ token, className = "" }: { token: HoldingToken; clas
   );
 }
 
-function Row({ token, value }: { token: HoldingToken; value: string | null }) {
+function Row({
+  token,
+  value,
+  xrpUsd,
+}: {
+  token: HoldingToken;
+  value: string | null;
+  xrpUsd: number | null;
+}) {
+  const worth = PRICED.includes(token) ? usd(value, xrpUsd) : null;
   return (
     <div className="flex items-center gap-3 py-3 border-t border-steel-line first:border-t-0 first:pt-0">
       <TokenMark token={token} className="h-6 w-6 shrink-0 text-ink" />
@@ -71,8 +94,13 @@ function Row({ token, value }: { token: HoldingToken; value: string | null }) {
         <p className="mono-label text-[0.66rem] text-ink leading-none">{token}</p>
         <p className="mono-label text-[0.54rem] text-ink-3 mt-1.5 leading-none">{TOKEN_SUB[token]}</p>
       </div>
-      {/* A dash, never a zero, while a balance is still in flight — a stale number reads as fact. */}
-      <p className="mono-data text-[0.95rem] text-ink text-right tabular-nums">{value ?? "—"}</p>
+      <div className="text-right">
+        {/* A dash, never a zero, while a balance is still in flight — a stale number reads as fact. */}
+        <p className="mono-data text-[0.95rem] text-ink tabular-nums leading-none">{value ?? "—"}</p>
+        {worth && (
+          <p className="mono-label text-[0.56rem] text-ink-3 mt-1.5 leading-none tabular-nums">{worth}</p>
+        )}
+      </div>
     </div>
   );
 }
@@ -109,20 +137,61 @@ export default function Holdings({
   const short = `${address.slice(0, 6)}…${address.slice(-4)}`;
   const showActions = !faucetDone || needsGas;
 
+  // Priced off FTSOv2 — the same feed lock() re-checks the ±1% band against, so the valuation here
+  // and the protection on the trade come from one source. Re-read when a balance moves; a failure
+  // simply leaves the figures unpriced rather than showing a stale one.
+  const [xrpUsd, setXrpUsd] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/price");
+        if (!res.ok) return;
+        const data: { xrpUsd?: string } = await res.json();
+        const n = Number(data.xrpUsd);
+        if (!cancelled && Number.isFinite(n) && n > 0) setXrpUsd(n);
+      } catch {
+        /* unpriced is an honest state; a stale price is not */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fxrp, xrp]);
+
+  const total = usd(
+    String((Number(fxrp ?? 0) || 0) + (Number(xrp ?? 0) || 0)),
+    xrpUsd,
+  );
+
   return (
     <div className="panel overflow-hidden">
       <div className="px-5 py-3.5 border-b border-steel-line flex items-center justify-between gap-3">
-        <p className="mono-label text-[0.6rem] text-ice">Holdings</p>
+        <div>
+          <p className="mono-label text-[0.6rem] text-ice">Holdings</p>
+          {total && (
+            <p className="mono-data text-[0.8rem] text-ink mt-1.5 tabular-nums leading-none">{total}</p>
+          )}
+        </div>
         <p className="mono-data text-[0.66rem] text-ink-3" title={address}>
           {short}
         </p>
       </div>
 
       <div className="px-5 py-3">
-        <Row token="FXRP" value={fxrp} />
-        {xrp !== undefined && <Row token="XRP" value={xrp} />}
-        <Row token="C2FLR" value={c2flr} />
+        <Row token="FXRP" value={fxrp} xrpUsd={xrpUsd} />
+        {xrp !== undefined && <Row token="XRP" value={xrp} xrpUsd={xrpUsd} />}
+        <Row token="C2FLR" value={c2flr} xrpUsd={xrpUsd} />
       </div>
+
+      {xrpUsd !== null && (
+        <div className="px-5 pb-3 -mt-1">
+          <p className="mono-label text-[0.5rem] text-ink-3 leading-relaxed">
+            Valued at the live FTSOv2 XRP/USD mid — the same feed the escrow re-checks the ±1% band
+            against. C2FLR is testnet gas and carries no price.
+          </p>
+        </div>
+      )}
 
       {freeBond != null && (
         <div className="px-5 py-3 border-t border-steel-line flex items-center justify-between gap-3">
