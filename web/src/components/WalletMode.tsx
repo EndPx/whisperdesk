@@ -122,6 +122,17 @@ function toneClass(tone: LogTone) {
 
 type StatusResponse = { enabled: boolean; fxrp: string; c2flr: string };
 type FaucetResponse = { txHash: string; minted: string; balance: string; error?: string; enabled?: boolean };
+/** /api/wallet/gas. `skipped` comes back when the address could already pay its own way, in which
+ *  case there is no txHash — the balance is still authoritative and worth showing. */
+type GasResponse = {
+  txHash?: string;
+  sent?: string;
+  balance: string;
+  skipped?: boolean;
+  reason?: string;
+  error?: string;
+  enabled?: boolean;
+};
 type XrplAccountResponse = { address: string; seed: string; funded: boolean; error?: string; enabled?: boolean };
 type XrplBalanceResponse = { exists: boolean; balanceXrp: string; error?: string; enabled?: boolean };
 type PrepareResponse = {
@@ -171,6 +182,10 @@ export default function WalletMode({
   const [enabled, setEnabled] = useState<boolean | null>(null); // null until first /api/wallet/status call
   const [c2flr, setC2flr] = useState("0");
   const [fxrp, setFxrp] = useState("0");
+
+  // S1 — gas drip (sits inside step 1: you cannot sign anything without it)
+  const [gasBusy, setGasBusy] = useState(false);
+  const [gasError, setGasError] = useState<string | null>(null);
 
   // S2 — faucet
   const [faucetBusy, setFaucetBusy] = useState(false);
@@ -296,6 +311,48 @@ export default function WalletMode({
       if (mountedRef.current) setConnecting(false);
     }
   }, [addLog, refreshStatus]);
+
+  /* ------------------------------------------------------------------------
+     S1b — C2FLR gas drip.
+
+     Gas was the only funding step that used to send a judge off the site
+     mid-run. The desk covers it now; the route decides whether to, and the
+     external faucet stays on screen as the fallback when it declines.
+  ------------------------------------------------------------------------ */
+
+  const handleGas = useCallback(async () => {
+    if (!address) return;
+    setGasBusy(true);
+    setGasError(null);
+    try {
+      const res = await postJSON<GasResponse>("/api/wallet/gas", { address });
+      if (res.status === 429) {
+        setGasError(res.data?.error ?? "gas already sent to this address in the last 10 minutes");
+        return;
+      }
+      if (res.status === 503 || res.data?.enabled === false) {
+        setEnabled(false);
+        return;
+      }
+      if (!res.ok || !res.data) {
+        throw new Error(res.data?.error ?? "gas drip failed");
+      }
+      setC2flr(res.data.balance);
+      // Already funded: the balance is worth updating, but there is no transaction to announce.
+      if (res.data.skipped || !res.data.txHash) return;
+      addLog(`Desk sent ${res.data.sent} C2FLR for gas`, {
+        href: COSTON2_TX(res.data.txHash),
+        linkText: shortHash(res.data.txHash),
+        tone: "success",
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "gas drip failed";
+      setGasError(msg);
+      addLog(msg, { tone: "error" });
+    } finally {
+      if (mountedRef.current) setGasBusy(false);
+    }
+  }, [address, addLog]);
 
   /* ------------------------------------------------------------------------
      S2 — demo FXRP faucet
@@ -757,15 +814,30 @@ export default function WalletMode({
               <span className="text-ink-3">C2FLR gas </span>
               {c2flr}
             </p>
-            {toNum(c2flr) === 0 && (
-              <a
-                href="https://faucet.flare.network"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mono-label text-[0.62rem] text-ice hover:underline block mt-1"
-              >
-                Need Coston2 gas — faucet.flare.network
-              </a>
+            {/* Threshold, not zero: dust is as unspendable as an empty wallet, and it matches the
+                route's own GAS_ENOUGH_WEI so the button never appears for a drip that gets skipped. */}
+            {toNum(c2flr) < 0.1 && (
+              <div className="mt-2 space-y-1.5">
+                <button
+                  type="button"
+                  onClick={handleGas}
+                  disabled={gasBusy}
+                  className="mono-label text-[0.62rem] px-3 py-1.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
+                >
+                  {/* No amount in the label: the drip size lives in wallet-mode.ts and this is a
+                      client component, so a number here would be a copy that silently goes stale. */}
+                  {gasBusy ? "Sending…" : "Send me gas"}
+                </button>
+                {gasError && <p className="mono-label text-[0.6rem] text-iron-red">{gasError}</p>}
+                <a
+                  href="https://faucet.flare.network"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mono-label text-[0.58rem] text-ink-3 hover:text-ice hover:underline block"
+                >
+                  or use faucet.flare.network
+                </a>
+              </div>
             )}
           </div>
         )}

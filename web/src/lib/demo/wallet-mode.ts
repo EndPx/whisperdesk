@@ -51,6 +51,69 @@ export function checkAndRecordFaucetClaim(address: string): boolean {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Gas drip: enough C2FLR for a judge with an empty wallet to sign the demo's own transactions.
+//
+// Why it exists: every other funding step here is self-service — FXRP is minted above, the XRPL
+// account is generated and faucet-funded by /api/wallet/xrpl-account — but Coston2 gas used to push
+// a judge off-site to faucet.flare.network in the middle of a run, which is the likeliest place to
+// lose them entirely.
+//
+// Unlike MockFXRP this spends a balance the desk cannot mint back — and it spends it from the SAME
+// owner key that pays for the desk's own settlements (minting, locking, releasing). A drained owner
+// does not merely disable this button; it takes the whole demo down. Hence four guards:
+//   1. Per-address, one drip per GAS_RATE_LIMIT_MS — same window as the FXRP faucet.
+//   2. Already-funded addresses are refused by the route before a claim slot is even spent, so a
+//      full wallet cannot be cycled to pump the desk dry.
+//   3. A hard global ceiling per UTC day, independent of how many addresses ask.
+//   4. GAS_OWNER_RESERVE_WEI — the route refuses to drip at all once the owner's own balance would
+//      fall below the reserve it needs to keep settling. This is the guard that matters: the daily
+//      ceiling bounds a busy day, the reserve bounds a hostile one.
+//
+// The numbers are set against the owner's actual balance (~30 C2FLR when this was written), not
+// against a round number: a budget larger than the balance is not a budget.
+// ---------------------------------------------------------------------------------------------
+
+export const GAS_DRIP_WEI = ethers.parseEther("0.5"); // ~50+ Coston2 transactions, generous but bounded
+/** At or above this, the address can already pay for a transaction and the drip is pointless. */
+export const GAS_ENOUGH_WEI = ethers.parseEther("0.1");
+/** The desk keeps at least this much for its own settlements; drips stop before touching it. */
+export const GAS_OWNER_RESERVE_WEI = ethers.parseEther("15");
+const GAS_RATE_LIMIT_MS = 10 * 60 * 1000;
+const GAS_DAILY_BUDGET_WEI = ethers.parseEther("10");
+
+const lastGasClaim = new Map<string, number>(); // lowercased address -> claimedAt ms
+let gasSpentToday = BigInt(0); // literal `0n` needs ES2020; this file's target is lower (see FAUCET_MINT_RAW)
+let gasBudgetDay = "";
+
+export type GasClaimRefusal = "rate-limited" | "budget-exhausted";
+
+/// Authorises and records one drip for `address` (already checksum-validated by the caller).
+/// Returns null when the drip may proceed, or the reason it was refused. The daily counter resets
+/// on the first call of a new UTC day rather than on a timer, so there is no scheduler to drift.
+export function checkAndRecordGasClaim(address: string): GasClaimRefusal | null {
+  const key = address.toLowerCase();
+  const now = Date.now();
+
+  const last = lastGasClaim.get(key);
+  if (last !== undefined && now - last < GAS_RATE_LIMIT_MS) {
+    return "rate-limited";
+  }
+
+  const today = new Date(now).toISOString().slice(0, 10);
+  if (today !== gasBudgetDay) {
+    gasBudgetDay = today;
+    gasSpentToday = BigInt(0);
+  }
+  if (gasSpentToday + GAS_DRIP_WEI > GAS_DAILY_BUDGET_WEI) {
+    return "budget-exhausted";
+  }
+
+  gasSpentToday += GAS_DRIP_WEI;
+  lastGasClaim.set(key, now);
+  return null;
+}
+
+// ---------------------------------------------------------------------------------------------
 // Deadline knobs — see the route handlers + this task's return notes for which contract fields
 // these bind and why 30 minutes was chosen (>= the required 25-minute judge click-through budget).
 // ---------------------------------------------------------------------------------------------
