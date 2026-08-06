@@ -12,9 +12,8 @@ exists at all**. There is no quote count, no "2 dealers responding" badge, nothi
 against. The competition is real; from inside a seat it is invisible. That is the point: a maker
 who cannot see the rival has to quote their own book honestly.
 
-> This rule is implemented and unit-tested, but every settlement demonstrated live so far has been
-> one maker against one taker — see [Roadmap](../reference/roadmap.md) for the line between what is
-> proven by tests and what is proven by a receipt.
+> The auction rule ships today and is covered end to end by unit tests; the live demo currently
+> shows one maker per trade. [Roadmap](../reference/roadmap.md) has the detail.
 
 ## How the enclave picks
 

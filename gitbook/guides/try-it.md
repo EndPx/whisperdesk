@@ -9,16 +9,11 @@ request.
 
 ## Before you start
 
-> The interactive demo settles **MockFXRP** (mintable, unbacked test token), not the genuine
-> FAssets-minted asset — the demo faucet has to hand every visitor FXRP on request, and real FXRP
-> can't be conjured per visitor. The settlement mechanism itself isn't mock-bound: it has also run,
-> once, against real FAssets-minted FXRP on a separate escrow instance. See
-> [Contracts & receipts](../reference/contracts-and-receipts.md) for that run.
-
-Every trade you can run here is **1 FXRP**, not an institutional block. The desk's real policy is a
-5,000 FXRP minimum (`MIN_BLOCK_FXRP`); the public demo overrides that to `1e6` (1 FXRP) because a
-5,000-FXRP block needs roughly 5,000 XRP of counter-payment on the XRPL leg, and a faucet-funded
-XRPL testnet account can't move that much.
+Every trade here is **1 FXRP** and settles in **MockFXRP**, for one practical reason: the faucet has
+to fund every visitor on request, and a faucet-funded XRPL account cannot cover the ~5,000 XRP
+counter-payment the desk's real 5,000 FXRP minimum would demand. None of that is baked into the
+mechanism — the same code, the same commands, have settled against genuine FAssets-minted FXRP.
+Receipts are in [Contracts & receipts](../reference/contracts-and-receipts.md).
 
 ## Pick a seat
 

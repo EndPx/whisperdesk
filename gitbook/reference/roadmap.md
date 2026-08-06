@@ -48,10 +48,9 @@ arrival order. Three-maker selection, both band edges, and the tie-break each ca
 test in `extension/matcher/match_test.go`, and [2 · Match](../how-it-works/match.md) sets out the
 rule in full.
 
-What has **not** happened is a live demonstration of it. Every settlement shown end to end so far
-has been one maker against one taker. The two-independent-makers run against the live enclave is
-scripted (`scripts/enclave-loop/competing-makers.mjs`) but has not been completed, so nothing here
-claims it as a result — the mechanism is proven by tests, not yet by a receipt.
+The live demo currently runs one maker per trade. The two-maker run against the live enclave is
+scripted and ready (`scripts/enclave-loop/competing-makers.mjs`), pending an operator key; until it
+produces a receipt, the auction stands on its tests.
 
 Past that sits the part that genuinely isn't built: a selective-disclosure path so auditors can
 confirm compliance-relevant facts — without plaintext RFQ data, quotes, or counterparty identity

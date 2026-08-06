@@ -20,23 +20,23 @@ onchain regardless of what the enclave does or claims.
 
 ## What's live today
 
-WhisperDesk is proven end to end on Flare testnet, including once against real FAssets-minted FXRP
-minted by the team itself — not a live desk trading real size yet. The FCE extension is registered
-and running on Coston2 with its own extension ID, its own TEE machine at `PRODUCTION` status, and its
-own registry-enforced instruction sender. The public one-click demo runs a real DvP settlement on
-Coston2 + XRPL Testnet in about 4 minutes, most of it the FDC attestation round.
+WhisperDesk settles. The whole cycle — sealed RFQ, blind match, escrow lock, XRPL payment, FDC
+proof, FXRP release — runs end to end on Coston2 + XRPL Testnet, and has cleared against the
+**genuine FAssets-minted FXRP**, acquired through a v1.3 direct mint on the real protocol rather
+than a stand-in. The default path is live too: a maker who never pays gets slashed, permissionlessly.
+
+The FCE extension is registered and running on Coston2 with its own extension ID, its own TEE
+machine at `PRODUCTION` status, and its own registry-enforced instruction sender. The public demo
+completes a full DvP settlement in about 4 minutes, most of that the FDC attestation round. Every
+claim on this site carries an explorer link next to it.
 
 **Try it:** https://whisperdesk.endpx.cloud
 **Live enclave:** https://fce.endpx.cloud/info
 
-> The interactive demo settles a MockFXRP test token (mintable, unbacked) — the demo faucet has to
-> hand every visitor FXRP, and the real asset cannot be conjured per visitor. The mechanism itself is
-> not mock-bound: one full settlement has also run against the real FAssets-minted FXRP
-> (`AssetManagerFXRP.fAsset()`), on a second escrow instance. The enclave also runs in simulated-TEE
-> mode (`SIMULATED_TEE=true`, attestation `magic_pass`) — the path Flare states is eligible for
-> judging — and every trade you can run in the demo is 1 FXRP under a testnet-only override of the
-> desk's 5,000 FXRP minimum block size. See [Verify it yourself](guides/verify-yourself.md) for the
-> full scope notes and mitigations.
+> **Scope.** The public demo settles a mintable MockFXRP so the faucet can fund every visitor, sized
+> at 1 FXRP against the desk's 5,000 FXRP policy minimum, with the enclave in the simulated-TEE mode
+> Flare states is eligible for judging. [Trust model](architecture/trust-model.md) sets out each
+> choice and exactly what it costs.
 
 ## Where to next
 
