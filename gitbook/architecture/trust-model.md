@@ -55,7 +55,7 @@ the other's job.
 - **MockFXRP in the interactive demo.** The public one-click demo settles a mintable, unbacked
   MockFXRP test token (`0x700bfC3620585eb42F1Dda6aBA3Ac8E793859FBE`), because the demo faucet has
   to hand every visitor FXRP and the real asset cannot be conjured per visitor. The mechanism itself
-  is not mock-bound: one full settlement has also run against the real FAssets-minted FXRP
+  is not mock-bound: two full settlements have now run against the real FAssets-minted FXRP
   (`AssetManagerFXRP.fAsset()` =
   [`0x0b6A3645…3dc7`](https://coston2-explorer.flare.network/address/0x0b6A3645c240605887a5532109323A3E12273dc7))
   on a separate escrow instance, using a v1.3 direct mint acquired the way the protocol intends —

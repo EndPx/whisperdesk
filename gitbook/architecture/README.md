@@ -56,7 +56,7 @@ after `refundAfter + REFUND_GRACE` and slashes the bond to the taker.
 
 The interactive demo settles against MockFXRP (mintable, unbacked) because the demo faucet has to
 fund every visitor and the real asset can't be conjured per visitor. The mechanism itself is not
-mock-bound — it has also settled once against the real FAssets-minted FXRP above, on a dedicated
+mock-bound — it has settled twice against the real FAssets-minted FXRP above, on a dedicated
 escrow instance.
 
 ## 5. FTSOv2 / FDC / XRPL

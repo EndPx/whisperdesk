@@ -159,6 +159,24 @@ then funded by transfer from that balance — the run's transcript says so expli
 | FDC attestation request (voting round 1414419) | https://coston2-explorer.flare.network/tx/0x7c990bea581a5aa0f1b01e63d689c6b1b7e150678bc0ee5a0c18655ca6325371 |
 | `release()` — maker received 1.0 **real** FXRP | https://coston2-explorer.flare.network/tx/0x9ea70cafebbf0e6b937216af9cea374d798e6eb0466b7104fe40fd7e256aaea3 |
 
+### Run again on 6 August 2026
+
+"It worked once" and "it works" are different claims, so the whole thing was done a second time from
+scratch — another direct mint, then another settlement on the same escrow with the same commands.
+Nothing was reset or reused between the two runs.
+
+| Step | Receipt |
+|---|---|
+| XRPL payment → Core Vault (10.2 XRP, second direct mint) | https://testnet.xrpl.org/transactions/68D0D0041A8780B7D0F6F2CEBCB18B5CF43880C966FC0D6DDE7B5EF9C184AF53 |
+| FAssets mint — 10.0 more real FXRP | https://coston2-explorer.flare.network/tx/0xf2b1c06c81c215d82969ed2e6a4cdef23048dbf16eea301b3e8fc4f10d7bca4b |
+| `lock()` | https://coston2-explorer.flare.network/tx/0x28b7dff170bd8e5ce1d0ae6ca81712cad0c5e5170ae72ee6ee719ab26aa4786b |
+| XRPL payment (1,000,000 drops, destination tag 2) | https://testnet.xrpl.org/transactions/0C0DB6C6FB3ECCC9CAA7820B16987F4D3049CB14E26ACDF30A535D6B0BA12C1B |
+| FDC attestation request (voting round 1417476) | https://coston2-explorer.flare.network/tx/0x7af3ef8548efbd6e2604f4ca0755d834b09984b093129ad36ac572059fee5061 |
+| `release()` — maker received another 1.0 **real** FXRP | https://coston2-explorer.flare.network/tx/0x5934b0ac377ec4f256dd22216ab070ee14b5060ccf16559bc5667200d08ed6a3 |
+
+The desk still holds real FXRP after both runs, so this is not a one-off that consumed its own
+supply in order to exist.
+
 Reproduce:
 
 ```bash

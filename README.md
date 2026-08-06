@@ -5,7 +5,7 @@ XRP↔FXRP block trades across two chains with no trusted middleman: FXRP on Cos
 against an FDC-proven XRPL payment, and a maker who never pays is slashed — the default path is a
 designed outcome, not an error. The order flow that needs this is private by construction: sealed
 RFQs are matched inside a Flare Confidential Compute (FCE) enclave, and side, size, and
-counterparty never leave it. Proven end to end on Flare testnet — including once against real
+counterparty never leave it. Proven end to end on Flare testnet — including twice against real
 FAssets-minted FXRP we minted ourselves — not a live desk trading real size yet. Built for
 **Flare Summer Signal** — Bounty 2 (Confidential Compute).
 
@@ -23,7 +23,7 @@ This is a hackathon prototype, and these are its scope boundaries, not apologies
 
 - **The interactive demo settles a MockFXRP test token** (mintable, unbacked) — the demo faucet has
   to hand every visitor FXRP, and the real asset cannot be conjured per visitor. The mechanism
-  itself is not mock-bound: **one full settlement has also run against the real FAssets-minted FXRP**
+  itself is not mock-bound: **two full settlements have now run against the real FAssets-minted FXRP**
   (`AssetManagerFXRP.fAsset()` = [`0x0b6A3645…3dc7`](https://coston2-explorer.flare.network/address/0x0b6A3645c240605887a5532109323A3E12273dc7),
   6 decimals, same units) on a second escrow instance — receipts below.
 - **The enclave runs in simulated-TEE mode** (attestation `magic_pass`, `SIMULATED_TEE=true`) — the

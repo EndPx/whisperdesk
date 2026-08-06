@@ -5,6 +5,7 @@ import { PartyCard, BalanceRow, Rail, type PillSpec, type Ring } from "@/compone
 import WalletMode from "@/components/WalletMode";
 import MakerMode from "@/components/MakerMode";
 import DeskEntry from "@/components/DeskEntry";
+import RealAssetProof from "@/components/RealAssetProof";
 import { detectProvider } from "@/lib/wallet-client";
 
 /* ---------------------------------------------------------------------------
@@ -684,13 +685,18 @@ npm run happy-path`}
   // below mounts unchanged once a seat is chosen.
   if (!seated) {
     return (
-      <DeskEntry
-        onPick={(role) => {
-          userPickedModeRef.current = true;
-          setMode(role);
-          setSeated(true);
-        }}
-      />
+      <>
+        <DeskEntry
+          onPick={(role) => {
+            userPickedModeRef.current = true;
+            setMode(role);
+            setSeated(true);
+          }}
+        />
+        {/* Sits at the door, under the seats: every seat here settles MockFXRP, so the evidence
+            that the mechanism is not mock-bound belongs next to that fact, not three clicks away. */}
+        <RealAssetProof />
+      </>
     );
   }
 
