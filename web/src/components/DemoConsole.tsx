@@ -701,75 +701,37 @@ npm run happy-path`}
   }
 
   return (
-    <div className="mt-10">
-      {/* Mode switcher, deliberately NOT three equal doors. One-click is the default and carries the
-          visual weight; the two own-wallet modes sit on a quieter second line. Same three
-          destinations, same single click to reach any of them — only the emphasis differs, so a
-          judge who just wants to see it settle never has to make a choice first. */}
-      <div>
-        <button
-          type="button"
-          onClick={() => {
-            userPickedModeRef.current = true;
-            setMode("one-click");
-          }}
-          disabled={switcherDisabled}
-          aria-pressed={mode === "one-click"}
-          className={`mono-label text-[0.68rem] px-5 py-2.5 border transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none ${
-            mode === "one-click"
-              ? "border-ice/50 text-ice bg-ice/10"
-              : "border-steel-line-2 text-ink-2 hover:text-ink hover:border-ice-deep/60"
-          }`}
-        >
-          {/* Names the MODE, not the action. An earlier draft read "Watch it settle now", which
-              collided with the "Run live settlement" button further down the same page — two
-              near-synonymous labels where only one actually sends a transaction. */}
-          No setup — use the desk&apos;s wallet
-        </button>
-
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <span className="mono-label text-[0.56rem] text-ink-3">
-            Or be the counterparty, with your own wallet:
-          </span>
+    <div className="mt-3">
+      {/* One quiet segmented control, no prose. The seat picker at the door already said what each
+          seat is and what it can see; repeating it above every run turned the working screen into a
+          brochure — which is exactly what a desk should not look like. */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {(
+          [
+            { role: "one-click", label: "Desk wallet" },
+            { role: "wallet", label: "As the taker" },
+            { role: "maker", label: "As the maker" },
+          ] as const
+        ).map((m) => (
           <button
+            key={m.role}
             type="button"
             onClick={() => {
               userPickedModeRef.current = true;
-              setMode("wallet");
+              setMode(m.role);
             }}
             disabled={switcherDisabled}
-            aria-pressed={mode === "wallet"}
+            aria-pressed={mode === m.role}
             className={`mono-label text-[0.58rem] px-3 py-1.5 border transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none ${
-              mode === "wallet"
+              mode === m.role
                 ? "border-ice/50 text-ice bg-ice/10"
                 : "border-steel-line-2 text-ink-2 hover:text-ink hover:border-ice-deep/60"
             }`}
           >
-            as the taker
+            {m.label}
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              userPickedModeRef.current = true;
-              setMode("maker");
-            }}
-            disabled={switcherDisabled}
-            aria-pressed={mode === "maker"}
-            className={`mono-label text-[0.58rem] px-3 py-1.5 border transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none ${
-              mode === "maker"
-                ? "border-ice/50 text-ice bg-ice/10"
-                : "border-steel-line-2 text-ink-2 hover:text-ink hover:border-ice-deep/60"
-            }`}
-          >
-            as the maker
-          </button>
-        </div>
+        ))}
       </div>
-      <p className="mono-label text-[0.56rem] text-ink-3 mt-4 max-w-[62ch]">
-        All three run a real lock → pay → attest → release on Coston2 + XRPL. Maker mode is the only
-        one where two independent parties are actually matched inside the enclave — you quote blind
-        against a sealed RFQ and pay the XRP leg yourself.
-      </p>
 
       {mode === "one-click" ? (
         oneClickBody

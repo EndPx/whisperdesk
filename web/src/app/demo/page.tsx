@@ -19,16 +19,9 @@ export default function DemoPage() {
             had done anything — the first impression was a scrollbar. */}
         <section id="demo" className="snap-section py-5 sm:py-6">
           <div className="mx-auto max-w-[1600px] px-5 sm:px-8">
-            <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-              <h1 className="font-display font-semibold text-[1.5rem] sm:text-[1.85rem] leading-[1.15] tracking-tight">
-                Watch it settle for real.
-              </h1>
-              <p className="mono-label text-[0.58rem] text-ink-3 max-w-[62ch] leading-relaxed">
-                A genuine DvP settlement on Coston2 + XRPL testnet — sealed lock, XRPL payment, FDC
-                proof, release. Every line links to a real transaction.
-              </p>
-            </div>
-
+            {/* No headline, no standfirst. A trading screen opens on the instrument, not on a title
+                card — and everything this page could say about itself is one click back on the
+                landing page the judge just came from. */}
             <DemoConsole />
           </div>
         </section>

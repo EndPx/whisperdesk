@@ -1079,29 +1079,9 @@ export default function MakerMode({
   return (
     <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-start">
       <div className="min-w-0 space-y-6">
-      {/* diagram — same visual vocabulary as WalletMode, roles mirrored */}
-      <div className="overflow-x-auto">
-        <div className="min-w-[480px] sm:min-w-0 px-2 pt-4 pb-2">
-          <div className="flex items-center gap-2 sm:gap-5">
-            <PartyCard sub="Maker" label="You">
-              <BalanceRow token="FXRP" value={toNum(fxrp)} />
-            </PartyCard>
-            <Rail key={`bond-${pillTick}`} pill={bondPill} />
-            <PartyCard sub="Escrow" label="WhisperDesk Vault">
-              <p className="mono-data text-[0.78rem] text-ink-3">
-                {matchId ? shortHash(matchId) : rfqData ? shortHash(rfqData.rfqId) : "—"}
-              </p>
-            </PartyCard>
-          </div>
-          <div className="mt-8 sm:mt-10 flex items-center gap-3 px-1">
-            <span className="mono-label text-[0.56rem] text-ink-3 shrink-0">You</span>
-            <Rail key={`pay-${pillTick}`} pill={payPill} dashed />
-            <span className="mono-label text-[0.56rem] text-ink-3 shrink-0">XRP Ledger — direct payment</span>
-            <Rail pill={null} dashed />
-            <span className="mono-label text-[0.56rem] text-ink-3 shrink-0">Taker (desk)</span>
-          </div>
-        </div>
-      </div>
+      {/* The party-and-rails diagram lived here. It restated what the Holdings rail and the console
+          log already say, cost roughly 200px above the fold, and animated while a maker was trying
+          to read a price. The landing page explains the mechanism; this is where it runs. */}
 
       {/* Connecting happens at the door now, so it is no longer a stage of the trade — it only
           reappears if the wallet was disconnected mid-run, which is a recovery, not a step. */}
