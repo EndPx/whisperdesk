@@ -253,10 +253,14 @@ export default function WalletMode({
   // Funding is no longer a numbered step, but it still gates: an unfunded wallet holds the flow at
   // step 1 rather than advancing into a trade it cannot pay for. The Holdings card carries the
   // action, so nothing is unreachable while this sits at 1.
-  // 0 means "not ready to trade yet" — no wallet, or no FXRP to trade with. Both are handled by
+  // Funded means HOLDS FXRP, not "clicked the faucet this session". Gating on faucetDone told a
+  // judge who already held a balance — from an earlier run, or a previous visit — to go and mint
+  // more, while the Holdings panel beside it displayed the balance they supposedly did not have.
+  const funded = faucetDone || toNum(fxrp) > 0;
+
+  // 0 means "not ready to trade yet" — no wallet, or nothing to trade with. Both are handled by
   // their own cards rather than by an inert numbered step, so the trade itself starts at 1.
-  const currentStep =
-    !address || !faucetDone ? 0 : !xrplAddress ? 1 : s4Stage !== "done" ? 2 : 3;
+  const currentStep = !address || !funded ? 0 : !xrplAddress ? 1 : s4Stage !== "done" ? 2 : 3;
 
   const walletBusy =
     connecting ||
@@ -793,7 +797,7 @@ export default function WalletMode({
 
       {/* Nothing can be signed without FXRP, and the mint lives in the rail — so say that, rather
           than showing an inert step the judge cannot act on. */}
-      {address && !faucetDone && (
+      {address && !funded && (
         <div className="panel px-6 py-5">
           <p className="mono-label text-[0.6rem] text-ice">One thing first</p>
           <p className="text-[0.9rem] text-ink mt-1.5">
@@ -805,7 +809,7 @@ export default function WalletMode({
       {/* Only what can be acted on now, plus what already happened. Future stages stay out of the
           way entirely: a ladder of greyed-out boxes describes the plumbing, not the trade. */}
       {currentStep >= 1 && (
-      <StepShell n={1} title="XRPL receive address" done={!!xrplAddress} active={currentStep >= 1}>
+      <StepShell n={1} title="XRPL receive address" done={!!xrplAddress} active={currentStep === 1}>
         {!xrplAddress ? (
           <div className="space-y-4">
             {/* Generate goes FIRST. Most judges have no XRPL testnet address, so this is the path
@@ -870,7 +874,7 @@ export default function WalletMode({
       )}
 
       {currentStep >= 2 && (
-      <StepShell n={2} title="Prepare + wallet confirmations" done={s4Stage === "done"} active={currentStep >= 2}>
+      <StepShell n={2} title="Prepare + wallet confirmations" done={s4Stage === "done"} active={currentStep === 2}>
         {s4Stage !== "done" ? (
           <div className="space-y-3">
             <button
@@ -914,7 +918,7 @@ export default function WalletMode({
       )}
 
       {currentStep >= 3 && (
-      <StepShell n={3} title="Watch settlement" done={s5Stage === "done"} active={currentStep >= 3}>
+      <StepShell n={3} title="Watch settlement" done={s5Stage === "done"} active={currentStep === 3}>
         {s5Stage !== "done" ? (
           <div className="space-y-3">
             <button
@@ -1015,7 +1019,7 @@ export default function WalletMode({
             xrp={xrplBalance}
             onFaucet={handleFaucet}
             faucetBusy={faucetBusy}
-            faucetDone={faucetDone}
+            faucetDone={funded}
             faucetError={faucetError}
             onGas={handleGas}
             gasBusy={gasBusy}

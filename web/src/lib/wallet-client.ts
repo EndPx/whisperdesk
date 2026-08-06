@@ -50,6 +50,24 @@ export async function connect(): Promise<string> {
   });
 }
 
+/** Hands the authorization back to the wallet, so "signed out" means signed out.
+ *
+ *  Clearing React state alone would not do it: getAuthorizedAccount() reads the permission from the
+ *  wallet on the next mount and would silently reconnect — exactly the behaviour that makes a
+ *  sign-out button feel broken. `wallet_revokePermissions` actually withdraws it.
+ *
+ *  Not every wallet implements that method, so a failure is swallowed deliberately: the caller
+ *  still clears its own state, which at minimum ends the session in this tab. */
+export async function disconnect(): Promise<void> {
+  const eth = detectProvider();
+  if (!eth) return;
+  try {
+    await eth.request({ method: "wallet_revokePermissions", params: [{ eth_accounts: {} }] });
+  } catch {
+    /* wallet does not support revocation — clearing local state is the fallback */
+  }
+}
+
 /** Returns the account this site is ALREADY authorized to use, or null — without prompting.
  *
  *  `eth_accounts` is the silent counterpart to `eth_requestAccounts`: the authorization lives in

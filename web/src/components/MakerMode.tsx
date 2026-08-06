@@ -408,10 +408,15 @@ export default function MakerMode({
 
   // Funding is no longer a numbered step, but it still gates: without FXRP there is no bond, so an
   // unfunded maker holds at step 1. The Holdings card carries the mint, so nothing is unreachable.
-  // 0 means "not ready to quote yet" — no wallet, or no FXRP to post a bond from. Both get their
+  // Funded means HOLDS FXRP, not "clicked the faucet this session". Gating on faucetDone told a
+  // maker who already held a balance to go and mint more, while the Holdings panel beside it
+  // displayed the balance they supposedly did not have.
+  const funded = faucetDone || toNum(fxrp) > 0;
+
+  // 0 means "not ready to quote yet" — no wallet, or nothing to post a bond from. Both get their
   // own card rather than an inert numbered step, so the trade itself starts at 1.
   const currentStep =
-    !address || !faucetDone
+    !address || !funded
       ? 0
       : s3Stage !== "done"
         ? 1
@@ -1102,7 +1107,7 @@ export default function MakerMode({
       )}
 
       {/* The bond comes out of this balance, so there is nothing to quote with until it exists. */}
-      {address && !faucetDone && (
+      {address && !funded && (
         <div className="panel px-6 py-5">
           <p className="mono-label text-[0.6rem] text-ice">One thing first</p>
           <p className="text-[0.9rem] text-ink mt-1.5">
@@ -1114,7 +1119,7 @@ export default function MakerMode({
 
       {/* Only what can be acted on now, plus what already happened. Future stages stay out of the
           way entirely: a ladder of greyed-out boxes describes the plumbing, not the trade. */}
-      <StepShell n={1} title="Open an RFQ to quote against" done={s3Stage === "done"} active={currentStep >= 1}>
+      <StepShell n={1} title="Open an RFQ to quote against" done={s3Stage === "done"} active={currentStep === 1}>
         {s3Stage !== "done" ? (
           <div className="space-y-4">
             {rfqData && (
@@ -1192,7 +1197,7 @@ export default function MakerMode({
       </StepShell>
 
       {/* S3 */}
-      <StepShell n={2} title="Quote it" done={quoteAccepted} active={currentStep >= 2}>
+      <StepShell n={2} title="Quote it" done={quoteAccepted} active={currentStep === 2}>
         {noMatchReasons && (
           <div className="mb-4 border border-steel-line-2 bg-vault-2 px-4 py-3">
             <p className="mono-label text-[0.6rem] text-ink-3 mb-1.5">No match — not an error, re-quote below</p>
@@ -1276,7 +1281,7 @@ export default function MakerMode({
       </StepShell>
 
       {/* S4 */}
-      <StepShell n={3} title="Match" done={!!matchId} active={currentStep >= 3}>
+      <StepShell n={3} title="Match" done={!!matchId} active={currentStep === 3}>
         {!matchId ? (
           <div className="space-y-3">
             <button
@@ -1297,7 +1302,7 @@ export default function MakerMode({
       </StepShell>
 
       {/* S5 */}
-      <StepShell n={4} title="Pay the XRP leg" done={s6Stage === "done"} active={currentStep >= 4}>
+      <StepShell n={4} title="Pay the XRP leg" done={s6Stage === "done"} active={currentStep === 4}>
         {currentStep >= 4 && s6Stage !== "done" && (
           <div className="space-y-4">
             <div className="space-y-1.5 border border-steel-line bg-vault-2 px-4 py-3.5">
@@ -1418,7 +1423,7 @@ export default function MakerMode({
       </StepShell>
 
       {/* S6 */}
-      <StepShell n={5} title="Watch settlement" done={s7Stage === "done"} active={currentStep >= 5}>
+      <StepShell n={5} title="Watch settlement" done={s7Stage === "done"} active={currentStep === 5}>
         {s7Stage !== "done" ? (
           <div className="space-y-3">
             <button
@@ -1525,7 +1530,7 @@ export default function MakerMode({
             freeBond={freeBond}
             onFaucet={handleFaucet}
             faucetBusy={faucetBusy}
-            faucetDone={faucetDone}
+            faucetDone={funded}
             faucetError={faucetError}
             onGas={handleGas}
             gasBusy={gasBusy}

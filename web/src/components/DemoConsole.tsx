@@ -6,7 +6,7 @@ import WalletMode from "@/components/WalletMode";
 import MakerMode from "@/components/MakerMode";
 import DeskEntry from "@/components/DeskEntry";
 import RealAssetProof from "@/components/RealAssetProof";
-import { detectProvider } from "@/lib/wallet-client";
+import { detectProvider, disconnect } from "@/lib/wallet-client";
 
 /* ---------------------------------------------------------------------------
    DemoConsole — the live judge-facing console at /demo.
@@ -731,6 +731,21 @@ npm run happy-path`}
             {m.label}
           </button>
         ))}
+
+        {/* Sign out sits at the far end, away from the mode buttons: it ends the session rather
+            than switching seats, and the two should not read as neighbours. */}
+        <button
+          type="button"
+          onClick={async () => {
+            await disconnect();
+            setSeated(false);
+            userPickedModeRef.current = false;
+          }}
+          disabled={switcherDisabled}
+          className="mono-label text-[0.58rem] px-3 py-1.5 border border-steel-line-2 text-ink-3 hover:text-iron-red hover:border-iron-red/50 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none ml-auto"
+        >
+          Sign out
+        </button>
       </div>
 
       {mode === "one-click" ? (
