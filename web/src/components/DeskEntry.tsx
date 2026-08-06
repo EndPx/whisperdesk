@@ -115,9 +115,9 @@ export default function DeskEntry({ onPick }: { onPick: (role: DeskRole) => void
   }, [setAddress]);
 
   return (
-    <div className="mt-10">
+    <div className="mt-6">
       {address && (
-        <div className="panel px-5 py-3 mb-5 flex items-center justify-between gap-3">
+        <div className="panel px-5 py-2.5 mb-4 flex items-center justify-between gap-3">
           <p className="mono-label text-[0.56rem] text-ink-3">Wallet connected · Coston2</p>
           <p className="mono-data text-[0.7rem] text-ink" title={address}>
             {`${address.slice(0, 6)}…${address.slice(-4)}`}
@@ -133,28 +133,28 @@ export default function DeskEntry({ onPick }: { onPick: (role: DeskRole) => void
           const blocked = needsWallet && hasProvider === false;
           const mustConnect = needsWallet && hasProvider !== false && !address;
           return (
-            <div key={s.role} className="panel flex flex-col p-7">
-              <p className={`mono-label text-[0.58rem] ${accentText}`}>{s.tag}</p>
-              <p className="font-display font-semibold text-[1.2rem] tracking-tight text-ink mt-2.5">
+            <div key={s.role} className="panel flex flex-col p-5">
+              <p className={`mono-label text-[0.56rem] ${accentText}`}>{s.tag}</p>
+              <p className="font-display font-semibold text-[1.1rem] tracking-tight text-ink mt-2">
                 {s.name}
               </p>
-              <p className="text-[0.88rem] leading-[1.6] text-ink-2 mt-1.5">{s.sees}</p>
+              <p className="text-[0.82rem] leading-[1.5] text-ink-2 mt-1">{s.sees}</p>
 
-              <div className="mt-6 border border-steel-line bg-vault-2/60 px-4 py-4">
-                <p className="mono-label text-[0.54rem] text-ink-3">{s.visibleLabel}</p>
-                <p className="mono-data text-[0.76rem] text-ink mt-1.5 leading-relaxed">
+              <div className="mt-4 border border-steel-line bg-vault-2/60 px-3.5 py-3">
+                <p className="mono-label text-[0.52rem] text-ink-3">{s.visibleLabel}</p>
+                <p className="mono-data text-[0.72rem] text-ink mt-1 leading-snug">
                   {s.visibleValue}
                 </p>
 
-                <div className="my-3.5 border-t border-steel-line" />
+                <div className="my-2.5 border-t border-steel-line" />
 
-                <p className="mono-label text-[0.54rem] text-ink-3">{s.sealedLabel}</p>
+                <p className="mono-label text-[0.52rem] text-ink-3">{s.sealedLabel}</p>
                 {s.sealedBlocks > 0 ? (
                   <RedactedBlocks count={s.sealedBlocks} />
                 ) : (
-                  <p className="mono-data text-[0.76rem] text-ice mt-1.5">~4 min</p>
+                  <p className="mono-data text-[0.72rem] text-ice mt-1">~4 min</p>
                 )}
-                <p className="mono-label text-[0.52rem] text-ink-3 mt-1.5 leading-relaxed">
+                <p className="mono-label text-[0.5rem] text-ink-3 mt-1 leading-snug">
                   {s.sealedNote}
                 </p>
               </div>
@@ -163,7 +163,7 @@ export default function DeskEntry({ onPick }: { onPick: (role: DeskRole) => void
                 type="button"
                 onClick={blocked ? undefined : mustConnect ? handleConnect : () => onPick(s.role)}
                 disabled={blocked || (mustConnect && connecting)}
-                className={`mono-label text-[0.64rem] mt-6 w-full px-4 py-3 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none ${
+                className={`mono-label text-[0.62rem] mt-4 w-full px-4 py-2.5 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none ${
                   s.role === "one-click"
                     ? "bg-ice text-vault-0 hover:bg-ice-deep hover:text-ink"
                     : "border border-steel-line-2 text-ink-2 hover:text-ink hover:border-ice-deep/60"
@@ -192,7 +192,7 @@ export default function DeskEntry({ onPick }: { onPick: (role: DeskRole) => void
         })}
       </div>
 
-      <p className="mono-label text-[0.56rem] text-ink-3 mt-6 max-w-[70ch] leading-relaxed">
+      <p className="mono-label text-[0.54rem] text-ink-3 mt-4 max-w-[80ch] leading-snug">
         All three run a real lock → pay → attest → release on Coston2 + XRPL testnet. Open the maker
         seat in a second window to watch two independent parties get matched without either seeing
         the other&apos;s order.

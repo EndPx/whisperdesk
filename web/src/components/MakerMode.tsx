@@ -408,18 +408,20 @@ export default function MakerMode({
 
   // Funding is no longer a numbered step, but it still gates: without FXRP there is no bond, so an
   // unfunded maker holds at step 1. The Holdings card carries the mint, so nothing is unreachable.
+  // 0 means "not ready to quote yet" — no wallet, or no FXRP to post a bond from. Both get their
+  // own card rather than an inert numbered step, so the trade itself starts at 1.
   const currentStep =
     !address || !faucetDone
-      ? 1
+      ? 0
       : s3Stage !== "done"
-        ? 2
+        ? 1
         : !quoteAccepted
-          ? 3
+          ? 2
           : !matchId
-            ? 4
+            ? 3
             : s6Stage !== "done"
-              ? 5
-              : 6;
+              ? 4
+              : 5;
 
   const makerBusy =
     connecting ||
@@ -1101,35 +1103,38 @@ export default function MakerMode({
         </div>
       </div>
 
-      {/* S1 */}
-      <StepShell n={1} title="Connect wallet" done={!!address} active>
-        {!address ? (
-          <>
-            <button
-              type="button"
-              onClick={handleConnect}
-              disabled={connecting}
-              className="mono-label text-[0.68rem] px-5 py-2.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
-            >
-              {connecting ? "Connecting…" : "Connect MetaMask"}
-            </button>
-            {connectError && <p className="mono-label text-[0.64rem] text-iron-red mt-3">{connectError}</p>}
-          </>
-        ) : (
-          <p className="mono-data text-[0.85rem] text-ink">
-            <span className="text-ink-3">Connected </span>
-            {shortHash(address)}
-            {!faucetDone && (
-              <span className="mono-label text-[0.58rem] text-ink-3 block mt-2">
-                Mint your demo FXRP in Holdings above — the bond is posted from it.
-              </span>
-            )}
-          </p>
-        )}
-      </StepShell>
+      {/* Connecting happens at the door now, so it is no longer a stage of the trade — it only
+          reappears if the wallet was disconnected mid-run, which is a recovery, not a step. */}
+      {!address && (
+        <div className="panel px-6 py-5">
+          <p className="mono-label text-[0.6rem] text-ice">Wallet disconnected</p>
+          <p className="text-[0.9rem] text-ink mt-1.5">Reconnect to pick the run back up.</p>
+          <button
+            type="button"
+            onClick={handleConnect}
+            disabled={connecting}
+            className="mono-label text-[0.64rem] mt-4 px-5 py-2.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
+          >
+            {connecting ? "Connecting…" : "Reconnect MetaMask"}
+          </button>
+          {connectError && <p className="mono-label text-[0.6rem] text-iron-red mt-3">{connectError}</p>}
+        </div>
+      )}
 
-      {/* S2 */}
-      <StepShell n={2} title="Open an RFQ to quote against" done={s3Stage === "done"} active={currentStep >= 2}>
+      {/* The bond comes out of this balance, so there is nothing to quote with until it exists. */}
+      {address && !faucetDone && (
+        <div className="panel px-6 py-5">
+          <p className="mono-label text-[0.6rem] text-ice">One thing first</p>
+          <p className="text-[0.9rem] text-ink mt-1.5">
+            Mint your demo FXRP in <span className="text-ice">Holdings</span> — your bond is posted
+            from it, and the desk pays for it.
+          </p>
+        </div>
+      )}
+
+      {/* Only what can be acted on now, plus what already happened. Future stages stay out of the
+          way entirely: a ladder of greyed-out boxes describes the plumbing, not the trade. */}
+      <StepShell n={1} title="Open an RFQ to quote against" done={s3Stage === "done"} active={currentStep >= 1}>
         {s3Stage !== "done" ? (
           <div className="space-y-4">
             {rfqData && (
@@ -1160,7 +1165,7 @@ export default function MakerMode({
                       ? () => runDepositBond(rfqData!)
                       : undefined
               }
-              disabled={currentStep < 2 || (s3Stage !== "idle" && !s3Error)}
+              disabled={currentStep < 1 || (s3Stage !== "idle" && !s3Error)}
               className="mono-label text-[0.68rem] px-5 py-2.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
             >
               {s3Stage === "idle"
@@ -1207,7 +1212,7 @@ export default function MakerMode({
       </StepShell>
 
       {/* S3 */}
-      <StepShell n={3} title="Quote it" done={quoteAccepted} active={currentStep >= 3}>
+      <StepShell n={2} title="Quote it" done={quoteAccepted} active={currentStep >= 2}>
         {noMatchReasons && (
           <div className="mb-4 border border-steel-line-2 bg-vault-2 px-4 py-3">
             <p className="mono-label text-[0.6rem] text-ink-3 mb-1.5">No match — not an error, re-quote below</p>
@@ -1232,7 +1237,7 @@ export default function MakerMode({
             <button
               type="button"
               onClick={refreshFtsoMid}
-              disabled={ftsoBusy || currentStep < 3}
+              disabled={ftsoBusy || currentStep < 2}
               className="mono-label text-[0.56rem] text-ice hover:underline disabled:opacity-30 disabled:pointer-events-none"
             >
               refresh
@@ -1252,7 +1257,7 @@ export default function MakerMode({
                 type="text"
                 value={priceInput}
                 onChange={(e) => setPriceInput(e.target.value)}
-                disabled={currentStep < 3}
+                disabled={currentStep < 2}
                 className="mono-data text-[0.82rem] bg-vault-2 border border-steel-line px-3 py-2 text-ink w-[160px] disabled:opacity-40"
               />
             </label>
@@ -1262,14 +1267,14 @@ export default function MakerMode({
                 type="text"
                 value={maxFxrpInput}
                 onChange={(e) => setMaxFxrpInput(e.target.value)}
-                disabled={currentStep < 3}
+                disabled={currentStep < 2}
                 className="mono-data text-[0.82rem] bg-vault-2 border border-steel-line px-3 py-2 text-ink w-[160px] disabled:opacity-40"
               />
             </label>
             <button
               type="button"
               onClick={runQuote}
-              disabled={currentStep < 3 || !priceInput || (s4Stage !== "idle" && s4Stage !== "done" && !s4Error)}
+              disabled={currentStep < 2 || !priceInput || (s4Stage !== "idle" && s4Stage !== "done" && !s4Error)}
               className="mono-label text-[0.68rem] px-5 py-2.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
             >
               {s4Stage === "signing"
@@ -1291,13 +1296,13 @@ export default function MakerMode({
       </StepShell>
 
       {/* S4 */}
-      <StepShell n={4} title="Match" done={!!matchId} active={currentStep >= 4}>
+      <StepShell n={3} title="Match" done={!!matchId} active={currentStep >= 3}>
         {!matchId ? (
           <div className="space-y-3">
             <button
               type="button"
               onClick={runMatch}
-              disabled={currentStep < 4 || matching}
+              disabled={currentStep < 3 || matching}
               className="mono-label text-[0.68rem] px-5 py-2.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
             >
               {matching ? "Asking the enclave to match…" : "Trigger matching"}
@@ -1312,8 +1317,8 @@ export default function MakerMode({
       </StepShell>
 
       {/* S5 */}
-      <StepShell n={5} title="Pay the XRP leg" done={s6Stage === "done"} active={currentStep >= 5}>
-        {currentStep >= 5 && s6Stage !== "done" && (
+      <StepShell n={4} title="Pay the XRP leg" done={s6Stage === "done"} active={currentStep >= 4}>
+        {currentStep >= 4 && s6Stage !== "done" && (
           <div className="space-y-4">
             <div className="space-y-1.5 border border-steel-line bg-vault-2 px-4 py-3.5">
               <p className="mono-data text-[0.85rem] text-ink break-all">
@@ -1433,7 +1438,7 @@ export default function MakerMode({
       </StepShell>
 
       {/* S6 */}
-      <StepShell n={6} title="Watch settlement" done={s7Stage === "done"} active={currentStep >= 6}>
+      <StepShell n={5} title="Watch settlement" done={s7Stage === "done"} active={currentStep >= 5}>
         {s7Stage !== "done" ? (
           <div className="space-y-3">
             <button
@@ -1449,7 +1454,7 @@ export default function MakerMode({
                         ? () => runRelease(proofData)
                         : undefined
               }
-              disabled={currentStep < 6 || (s7Stage !== "idle" && !s7Error)}
+              disabled={currentStep < 5 || (s7Stage !== "idle" && !s7Error)}
               className="mono-label text-[0.68rem] px-5 py-2.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
             >
               {s7Stage === "idle" && !s7Error
@@ -1582,12 +1587,13 @@ function StepShell({
   active: boolean;
   children: React.ReactNode;
 }) {
+  // A stage you cannot reach yet is not information, it is furniture. `active` is already true for
+  // the current stage and every finished one, so dropping the rest leaves exactly the trade: what
+  // you are doing, above the receipts of what you already did.
+  if (!active) return null;
+
   return (
-    <div
-      className={`panel px-6 py-6 sm:px-8 sm:py-7 transition-opacity duration-300 ${
-        active ? "" : "opacity-40 pointer-events-none"
-      }`}
-    >
+    <div className="panel px-6 py-6 sm:px-8 sm:py-7">
       <div className="flex items-center gap-3 mb-4">
         <span
           className={`mono-label text-[0.6rem] w-6 h-6 rounded-full border grid place-items-center shrink-0 ${

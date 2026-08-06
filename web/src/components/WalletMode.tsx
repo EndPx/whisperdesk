@@ -253,8 +253,10 @@ export default function WalletMode({
   // Funding is no longer a numbered step, but it still gates: an unfunded wallet holds the flow at
   // step 1 rather than advancing into a trade it cannot pay for. The Holdings card carries the
   // action, so nothing is unreachable while this sits at 1.
+  // 0 means "not ready to trade yet" — no wallet, or no FXRP to trade with. Both are handled by
+  // their own cards rather than by an inert numbered step, so the trade itself starts at 1.
   const currentStep =
-    !address || !faucetDone ? 1 : !xrplAddress ? 2 : s4Stage !== "done" ? 3 : 4;
+    !address || !faucetDone ? 0 : !xrplAddress ? 1 : s4Stage !== "done" ? 2 : 3;
 
   const walletBusy =
     connecting ||
@@ -791,35 +793,39 @@ export default function WalletMode({
         </div>
       </div>
 
-      {/* S1 */}
-      <StepShell n={1} title="Connect wallet" done={!!address} active>
-        {!address ? (
-          <>
-            <button
-              type="button"
-              onClick={handleConnect}
-              disabled={connecting}
-              className="mono-label text-[0.68rem] px-5 py-2.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
-            >
-              {connecting ? "Connecting…" : "Connect MetaMask"}
-            </button>
-            {connectError && <p className="mono-label text-[0.64rem] text-iron-red mt-3">{connectError}</p>}
-          </>
-        ) : (
-          <p className="mono-data text-[0.85rem] text-ink">
-            <span className="text-ink-3">Connected </span>
-            {shortHash(address)}
-            {!faucetDone && (
-              <span className="mono-label text-[0.58rem] text-ink-3 block mt-2">
-                Mint your demo FXRP in Holdings above to continue.
-              </span>
-            )}
-          </p>
-        )}
-      </StepShell>
+      {/* Connecting happens at the door now, so it is no longer a stage of the trade — it only
+          reappears if the wallet was disconnected mid-run, which is a recovery, not a step. */}
+      {!address && (
+        <div className="panel px-6 py-5">
+          <p className="mono-label text-[0.6rem] text-ice">Wallet disconnected</p>
+          <p className="text-[0.9rem] text-ink mt-1.5">Reconnect to pick the run back up.</p>
+          <button
+            type="button"
+            onClick={handleConnect}
+            disabled={connecting}
+            className="mono-label text-[0.64rem] mt-4 px-5 py-2.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
+          >
+            {connecting ? "Connecting…" : "Reconnect MetaMask"}
+          </button>
+          {connectError && <p className="mono-label text-[0.6rem] text-iron-red mt-3">{connectError}</p>}
+        </div>
+      )}
 
-      {/* S2 */}
-      <StepShell n={2} title="XRPL receive address" done={!!xrplAddress} active={currentStep >= 2}>
+      {/* Nothing can be signed without FXRP, and the mint lives in the rail — so say that, rather
+          than showing an inert step the judge cannot act on. */}
+      {address && !faucetDone && (
+        <div className="panel px-6 py-5">
+          <p className="mono-label text-[0.6rem] text-ice">One thing first</p>
+          <p className="text-[0.9rem] text-ink mt-1.5">
+            Mint your demo FXRP in <span className="text-ice">Holdings</span> — the desk pays for it.
+          </p>
+        </div>
+      )}
+
+      {/* Only what can be acted on now, plus what already happened. Future stages stay out of the
+          way entirely: a ladder of greyed-out boxes describes the plumbing, not the trade. */}
+      {currentStep >= 1 && (
+      <StepShell n={1} title="XRPL receive address" done={!!xrplAddress} active={currentStep >= 1}>
         {!xrplAddress ? (
           <div className="space-y-4">
             {/* Generate goes FIRST. Most judges have no XRPL testnet address, so this is the path
@@ -881,15 +887,16 @@ export default function WalletMode({
           </div>
         )}
       </StepShell>
+      )}
 
-      {/* S3 */}
-      <StepShell n={3} title="Prepare + wallet confirmations" done={s4Stage === "done"} active={currentStep >= 3}>
+      {currentStep >= 2 && (
+      <StepShell n={2} title="Prepare + wallet confirmations" done={s4Stage === "done"} active={currentStep >= 2}>
         {s4Stage !== "done" ? (
           <div className="space-y-3">
             <button
               type="button"
               onClick={s4Stage === "idle" ? runPrepare : s4Stage === "approve" ? () => runApprove(prepareData!) : s4Stage === "deposit" ? () => runDeposit(prepareData!) : s4Stage === "lock" ? () => runLock(prepareData!) : undefined}
-              disabled={currentStep < 3 || (s4Stage !== "idle" && !s4Error)}
+              disabled={currentStep < 2 || (s4Stage !== "idle" && !s4Error)}
               className="mono-label text-[0.68rem] px-5 py-2.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
             >
               {s4Stage === "idle"
@@ -924,9 +931,10 @@ export default function WalletMode({
           </p>
         )}
       </StepShell>
+      )}
 
-      {/* S4 */}
-      <StepShell n={4} title="Watch settlement" done={s5Stage === "done"} active={currentStep >= 4}>
+      {currentStep >= 3 && (
+      <StepShell n={3} title="Watch settlement" done={s5Stage === "done"} active={currentStep >= 3}>
         {s5Stage !== "done" ? (
           <div className="space-y-3">
             <button
@@ -944,7 +952,7 @@ export default function WalletMode({
                           ? () => runRelease(proofData)
                           : undefined
               }
-              disabled={currentStep < 4 || (s5Stage !== "idle" && !s5Error)}
+              disabled={currentStep < 3 || (s5Stage !== "idle" && !s5Error)}
               className="mono-label text-[0.68rem] px-5 py-2.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
             >
               {s5Stage === "idle" && !s5Error
@@ -975,6 +983,7 @@ export default function WalletMode({
           </p>
         )}
       </StepShell>
+      )}
 
       {/* console log */}
       <div className="panel px-6 py-6 sm:px-8 sm:py-7">
@@ -1068,12 +1077,13 @@ function StepShell({
   active: boolean;
   children: React.ReactNode;
 }) {
+  // A stage you cannot reach yet is not information, it is furniture. `active` is already true for
+  // the current stage and every finished one, so dropping the rest leaves exactly the trade: what
+  // you are doing, above the receipts of what you already did.
+  if (!active) return null;
+
   return (
-    <div
-      className={`panel px-6 py-6 sm:px-8 sm:py-7 transition-opacity duration-300 ${
-        active ? "" : "opacity-40 pointer-events-none"
-      }`}
-    >
+    <div className="panel px-6 py-6 sm:px-8 sm:py-7">
       <div className="flex items-center gap-3 mb-4">
         <span
           className={`mono-label text-[0.6rem] w-6 h-6 rounded-full border grid place-items-center shrink-0 ${

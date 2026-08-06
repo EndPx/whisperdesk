@@ -39,52 +39,41 @@ const FXRP_TOKEN =
   "https://coston2-explorer.flare.network/address/0x0b6A3645c240605887a5532109323A3E12273dc7";
 
 export default function RealAssetProof() {
+  // One strip, not three stacked sections: this is a footnote that has to be believable, not a
+  // section competing with the seats above it for the first screen.
   return (
-    <div className="panel overflow-hidden mt-10">
-      <div className="px-6 py-4 border-b border-steel-line">
-        <p className="mono-label text-[0.6rem] text-ice">Settled in the real asset — twice</p>
-        <p className="text-[0.9rem] text-ink mt-1.5 font-medium">
-          The seats above trade a mintable test token. The mechanism does not need one.
-        </p>
-      </div>
+    <div className="panel px-5 py-3.5 mt-4 flex flex-wrap items-center gap-x-5 gap-y-2">
+      <p className="mono-label text-[0.56rem] text-ice shrink-0">Settled in the real asset — twice</p>
 
-      <div className="px-6 py-4">
-        <p className="mono-label text-[0.56rem] text-ink-3 leading-relaxed">
-          The demo settles MockFXRP because its faucet has to fund every visitor on request. The same
-          contracts, driven by the same commands, have twice settled{" "}
-          <a href={FXRP_TOKEN} target="_blank" rel="noopener noreferrer" className="text-ice hover:underline">
-            genuine FAssets-minted FXRP
-          </a>{" "}
-          — acquired by a v1.3 direct mint we initiated on the real protocol, not handed to us.
-        </p>
+      <p className="mono-label text-[0.52rem] text-ink-3 leading-snug flex-1 min-w-[24ch]">
+        The seats settle MockFXRP so the faucet can fund every visitor. The same contracts have twice
+        settled{" "}
+        <a href={FXRP_TOKEN} target="_blank" rel="noopener noreferrer" className="text-ice hover:underline">
+          genuine FAssets-minted FXRP
+        </a>
+        , acquired by a v1.3 direct mint we initiated — the second run minted and executed from
+        scratch, which is what makes it a mechanism rather than an anecdote.
+      </p>
 
-        <div className="mt-4 space-y-3">
-          {RUNS.map((run) => (
-            <div key={run.label} className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-              <span className="mono-label text-[0.56rem] text-ink-3 w-[5.5rem] shrink-0">{run.label}</span>
-              {run.steps.map((s, i) => (
-                <span key={s.name} className="flex items-center gap-2">
-                  {i > 0 && <span className="mono-label text-[0.56rem] text-ink-3/50">→</span>}
-                  <a
-                    href={s.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mono-label text-[0.58rem] text-ice hover:underline"
-                  >
-                    {s.name}
-                  </a>
-                </span>
-              ))}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="px-6 py-3.5 border-t border-steel-line bg-vault-2/60">
-        <p className="mono-label text-[0.54rem] text-ink-3 leading-relaxed">
-          One settlement proves a path exists. The second was minted and run from scratch afterwards,
-          which is what makes it a mechanism rather than an anecdote.
-        </p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        {RUNS.map((run) => (
+          <span key={run.label} className="flex items-center gap-1.5">
+            <span className="mono-label text-[0.5rem] text-ink-3">{run.label}</span>
+            {run.steps.map((s, i) => (
+              <span key={s.name} className="flex items-center gap-1.5">
+                {i > 0 && <span className="mono-label text-[0.5rem] text-ink-3/50">→</span>}
+                <a
+                  href={s.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mono-label text-[0.54rem] text-ice hover:underline"
+                >
+                  {s.name}
+                </a>
+              </span>
+            ))}
+          </span>
+        ))}
       </div>
     </div>
   );
