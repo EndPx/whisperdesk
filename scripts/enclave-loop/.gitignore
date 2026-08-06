@@ -1,9 +1,10 @@
 node_modules/
 wd-client
 wd-client.exe
-# run artifacts (contain a specific run's rfqId / signature)
-match.json
-quote-signed.json
-match-onchain.json
-quote-onchain.json
-rfq-live.json
+# Run artifacts. Globs, not exact names: these hold plaintext order data — side, size, limit
+# price, the taker's XRPL address — which is the one thing the desk promises never leaves the
+# enclave. A per-name list silently stops covering the moment a script writes a new tag
+# (competing-makers.mjs writes quote-<maker>.json), so match the shape instead.
+rfq-*.json
+quote-*.json
+match*.json
