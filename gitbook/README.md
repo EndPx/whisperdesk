@@ -24,7 +24,7 @@ WhisperDesk is proven end to end on Flare testnet, including once against real F
 minted by the team itself — not a live desk trading real size yet. The FCE extension is registered
 and running on Coston2 with its own extension ID, its own TEE machine at `PRODUCTION` status, and its
 own registry-enforced instruction sender. The public one-click demo runs a real DvP settlement on
-Coston2 + XRPL Testnet in about 3 minutes.
+Coston2 + XRPL Testnet in about 4 minutes, most of it the FDC attestation round.
 
 **Try it:** https://whisperdesk.endpx.cloud
 **Live enclave:** https://fce.endpx.cloud/info
@@ -35,12 +35,14 @@ Coston2 + XRPL Testnet in about 3 minutes.
 > (`AssetManagerFXRP.fAsset()`), on a second escrow instance. The enclave also runs in simulated-TEE
 > mode (`SIMULATED_TEE=true`, attestation `magic_pass`) — the path Flare states is eligible for
 > judging — and every trade you can run in the demo is 1 FXRP under a testnet-only override of the
-> desk's 5,000 FXRP minimum block size. See [Verify Yourself](./verify-yourself.md) for the full scope
-> notes and mitigations.
+> desk's 5,000 FXRP minimum block size. See [Verify it yourself](guides/verify-yourself.md) for the
+> full scope notes and mitigations.
 
 ## Where to next
 
-- [How It Works](./how-it-works.md) — the sealed matching, DvP settlement, and trust model in detail.
-- [Try It](./try-it.md) — run the live demo yourself, as taker or as maker.
-- [Verify Yourself](./verify-yourself.md) — addresses, receipts, and commands to check every claim on
-  this page independently.
+- [The life of a block trade](how-it-works/README.md) — seal, match, and settle-or-slash in detail.
+- [Trust model](architecture/trust-model.md) — what the enclave is trusted for, what the chain
+  enforces, and the worst case if the enclave is fully compromised.
+- [Try it live](guides/try-it.md) — run the demo yourself, from whichever seat you pick.
+- [Verify it yourself](guides/verify-yourself.md) — addresses, receipts, and commands to check every
+  claim on this page independently.

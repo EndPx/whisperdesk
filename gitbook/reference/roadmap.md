@@ -11,7 +11,7 @@ mainnet. This page lays out that distance, in the order it needs to be closed.
 | Hardware TEE | Simulated-TEE mode (attestation `magic_pass`, `SIMULATED_TEE=true`), fully registered onchain — extension `65641`, TEE machine at `PRODUCTION` status, registry-enforced instruction sender | GCP Confidential Space with genuine remote attestation, and a signing key that survives a restart |
 | Real-size blocks | Canonical policy is a 5,000 FXRP minimum block; the deployed integration instance overrides `MIN_BLOCK_FXRP` to `1e6` (1 FXRP), because a 5,000-FXRP block needs ~5,000 XRP of counter-payment and a faucet-funded XRPL testnet account can't move that | Liquidity and counter-payment capacity that lets the desk operate at the canonical minimum, not the testnet override |
 | Full FAssets integration | The interactive demo settles MockFXRP (mintable, unbacked) so the faucet can fund every visitor; a separate escrow instance has settled once against real FAssets-minted FXRP via a v1.3 direct mint we initiated ourselves | Settle the demo itself in real FXRP, with direct mint/redeem wired into the desk instead of a manual, one-off mint |
-| Multi-maker RFQ auctions | The sealed book matches one taker against one maker, one trade at a time | Multiple makers registered into the same sealed book, competing on a single RFQ in-enclave, with selective disclosure so an auditor can verify compliance facts without the plaintext RFQ, quote, or counterparty identity ever leaving the enclave |
+| Multi-maker RFQ auctions | The matcher already takes many quotes per sealed RFQ and awards the best price (ties broken by arrival), covered by unit tests — but every settlement demonstrated live so far has been one maker against one taker | A live run with two independent makers on one sealed RFQ, then selective disclosure so an auditor can verify compliance facts without the plaintext RFQ, quote, or counterparty identity ever leaving the enclave |
 | Mainnet path | Every address, transaction, and receipt in this repo is Coston2 + XRPL Testnet only; not audited, not production custody | Songbird first, then Flare mainnet, gated on a security review — no mainnet deploy before that review clears |
 
 ## Hardware TEE
@@ -42,11 +42,20 @@ into the desk itself, and settling the public demo on the same asset.
 
 ## Multi-maker RFQ auctions
 
-Today's sealed book proves the privacy and settlement invariants with one maker and one taker.
-Multi-maker auctions raise the bar: several makers quoting blind against the same sealed RFQ,
-matched in-enclave, with a selective-disclosure path so auditors can confirm compliance-relevant
-facts — without plaintext RFQ data, quotes, or counterparty identity ever leaving the enclave, the
-same invariant the desk already enforces for a single match.
+The matching rule is already an auction. `matchCore` takes a slice of quotes for one sealed RFQ,
+runs the same six filters over each, and awards the trade to the best price — ties broken by
+arrival order. Three-maker selection, both band edges, and the tie-break each carry their own unit
+test in `extension/matcher/match_test.go`, and [2 · Match](../how-it-works/match.md) sets out the
+rule in full.
+
+What has **not** happened is a live demonstration of it. Every settlement shown end to end so far
+has been one maker against one taker. The two-independent-makers run against the live enclave is
+scripted (`scripts/enclave-loop/competing-makers.mjs`) but has not been completed, so nothing here
+claims it as a result — the mechanism is proven by tests, not yet by a receipt.
+
+Past that sits the part that genuinely isn't built: a selective-disclosure path so auditors can
+confirm compliance-relevant facts — without plaintext RFQ data, quotes, or counterparty identity
+ever leaving the enclave, the same invariant the desk already enforces for a single match.
 
 ## Mainnet path
 

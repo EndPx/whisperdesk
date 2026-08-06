@@ -19,8 +19,13 @@ The Flare Confidential Compute (FCE) enclave holds the sensitive parts of a trad
 
 This data is **RAM-only** — it never lands in a database, never gets logged, and never touches the
 demo's backend (which only stores public data: aggregate tape, settlement-tracker cache, proof
-status). The enclave emits exactly one artifact to the outside world: a signed `MatchInstruction`
-(`WD_MATCH_V1`).
+status).
+
+The enclave emits exactly one **signed** artifact: a `MatchInstruction` (`WD_MATCH_V1`). The
+response carrying it also reports the outcome and an aggregate `reasons` map — counts of why
+non-winning quotes were excluded, with no addresses, no prices, and no entry at all for a quote
+that was eligible and merely lost on price. That map is withheld from a matched maker, so winning
+never reveals a rival was there; see [2 · Match](../how-it-works/match.md) for the exact boundary.
 
 ## 2. What the chain verifies
 

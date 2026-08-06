@@ -13,16 +13,21 @@ request.
 > FAssets-minted asset — the demo faucet has to hand every visitor FXRP on request, and real FXRP
 > can't be conjured per visitor. The settlement mechanism itself isn't mock-bound: it has also run,
 > once, against real FAssets-minted FXRP on a separate escrow instance. See
-> [Contracts & receipts](contracts-and-receipts.md) for that run.
+> [Contracts & receipts](../reference/contracts-and-receipts.md) for that run.
 
 Every trade you can run here is **1 FXRP**, not an institutional block. The desk's real policy is a
 5,000 FXRP minimum (`MIN_BLOCK_FXRP`); the public demo overrides that to `1e6` (1 FXRP) because a
 5,000-FXRP block needs roughly 5,000 XRP of counter-payment on the XRPL leg, and a faucet-funded
 XRPL testnet account can't move that much.
 
-## Three ways to run it
+## Pick a seat
 
-| Mode | What you use | What it proves |
+The console opens on a door rather than a dashboard. You choose which side of the trade you sit
+on — **Watch the desk trade**, **Sit as the taker**, or **Sit as the maker** — and the desk opens
+in that seat. Each card states what that seat is shown and draws what it is not as redacted blocks,
+so the asymmetry is visible before you commit to a role.
+
+| Seat | What you use | What it proves |
 |---|---|---|
 | **No setup** | The desk's own testnet keys | Fastest way to watch a full seal → match → settle cycle. Rate-limited: 3 runs per visitor per day, 20 globally. |
 | **As the taker** | Your own MetaMask, plus a generated XRPL account (faucet-funded for you) | The XRP leg lands on an XRPL address you actually control, not a demo wallet. |
@@ -47,8 +52,20 @@ This is the only mode where you're matched against an independent counterparty i
 not against the desk itself. You quote blind — the taker's side, size, and limit stay sealed; you
 never see them before you commit. On a match you post a real **1% bond**, then have **180 seconds**
 to send the XRP leg. Miss that window and the bond is slashed to the taker — that's not a failure
-mode, it's the default protection described in [Trust model](trust-model.md) doing exactly what
-it's designed to do.
+mode, it's the default protection described in [Trust model](../architecture/trust-model.md) doing
+exactly what it's designed to do.
+
+## What your seat is not told
+
+Whichever seat you take, a panel stays on screen for the whole run listing the fields the enclave
+holds and never discloses to you. Sitting as the maker, that list covers the RFQ's side, its size,
+the taker's limit and identity, a rival's price — and whether a rival exists at all, not even the
+count. Sitting as the taker, it covers who is quoting you, how many are, and every losing quote.
+
+It is a standing inventory rather than a one-time notice on purpose: the claim is a property of the
+venue, not a step in the flow. And these fields are not merely hidden by the interface — they were
+never sent to your browser, so there is nothing there to un-hide. [2 · Match](../how-it-works/match.md)
+traces where each one stops.
 
 ## Why it pauses after you pay
 
