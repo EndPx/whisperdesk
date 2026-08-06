@@ -5,6 +5,7 @@ import { ethers } from "ethers";
 import { BalanceRow, IconCheck, PartyCard, Rail, type PillSpec } from "@/components/flow/parts";
 import WithheldPanel, { MAKER_WITHHELD } from "@/components/WithheldPanel";
 import Holdings from "@/components/Holdings";
+import MarketReference from "@/components/MarketReference";
 import { useWalletAccount } from "@/lib/useWalletAccount";
 import {
   connect,
@@ -1069,8 +1070,13 @@ export default function MakerMode({
   const band = ftsoMid18 !== null ? bandOf(ftsoMid18) : null;
   const rfqExpired = rfqRemainingSeconds !== null && rfqRemainingSeconds <= 0 && s3Stage !== "done";
 
+  // Left column is the work; the right rail is standing context — reference price, what the enclave
+  // withholds, what you hold. Stacked above the steps those three scrolled away the moment a maker
+  // started working. Pinned beside the flow they stay answerable at a glance, which is the whole
+  // reason a trading screen has a rail at all.
   return (
-    <div className="mt-6 space-y-6">
+    <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-start">
+      <div className="min-w-0 space-y-6">
       {/* diagram — same visual vocabulary as WalletMode, roles mirrored */}
       <div className="overflow-x-auto">
         <div className="min-w-[480px] sm:min-w-0 px-2 pt-4 pb-2">
@@ -1094,37 +1100,6 @@ export default function MakerMode({
           </div>
         </div>
       </div>
-
-      {/* Stands for the whole run, not one step: the blindness is a property of the venue, and a
-          maker should be able to see the list of what they are not being told at any moment. */}
-      <WithheldPanel
-        title="The enclave withholds"
-        tagline="Blind by construction. Quote freely."
-        items={MAKER_WITHHELD}
-        footer="Not hidden by this screen — never sent to it. The enclave discloses a match only after it has signed one, and only to the two parties in it."
-      />
-
-      {/* Holdings sits above the steps and outlives all of them. Funding is wallet state, not a
-          stage of the trade — as a numbered step it read like something the maker had to negotiate,
-          when in truth the desk pays for all of it. */}
-      {address && (
-        <Holdings
-          address={address}
-          fxrp={fxrp}
-          c2flr={c2flr}
-          freeBond={freeBond}
-          onFaucet={handleFaucet}
-          faucetBusy={faucetBusy}
-          faucetDone={faucetDone}
-          faucetError={faucetError}
-          onGas={handleGas}
-          gasBusy={gasBusy}
-          gasError={gasError}
-          /* Threshold, not zero: dust is as unspendable as an empty wallet, and it matches the
-             route's GAS_ENOUGH_WEI so the button never offers a drip that would be skipped. */
-          needsGas={toNum(c2flr) < 0.1}
-        />
-      )}
 
       {/* S1 */}
       <StepShell n={1} title="Connect wallet" done={!!address} active>
@@ -1549,6 +1524,42 @@ export default function MakerMode({
           )}
         </div>
       </div>
+      </div>
+
+      {/* The rail. Sticky on wide screens so it survives the scroll through six steps; on narrow
+          ones the grid collapses and it simply follows the flow, which is the right fallback —
+          there is no room to pin anything on a phone. */}
+      <aside className="space-y-6 lg:sticky lg:top-6">
+        <MarketReference />
+
+        {address && (
+          <Holdings
+            address={address}
+            fxrp={fxrp}
+            c2flr={c2flr}
+            freeBond={freeBond}
+            onFaucet={handleFaucet}
+            faucetBusy={faucetBusy}
+            faucetDone={faucetDone}
+            faucetError={faucetError}
+            onGas={handleGas}
+            gasBusy={gasBusy}
+            gasError={gasError}
+            /* Threshold, not zero: dust is as unspendable as an empty wallet, and it matches the
+               route's GAS_ENOUGH_WEI so the button never offers a drip that would be skipped. */
+            needsGas={toNum(c2flr) < 0.1}
+          />
+        )}
+
+        {/* Stands for the whole run, not one step: the blindness is a property of the venue, and a
+            maker should be able to see what they are not being told at any moment. */}
+        <WithheldPanel
+          title="The enclave withholds"
+          tagline="Blind by construction. Quote freely."
+          items={MAKER_WITHHELD}
+          footer="Not hidden by this screen — never sent to it. The enclave discloses a match only after it has signed one, and only to the two parties in it."
+        />
+      </aside>
     </div>
   );
 }

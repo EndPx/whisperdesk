@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BalanceRow, IconCheck, PartyCard, Rail, type PillSpec } from "@/components/flow/parts";
 import Holdings from "@/components/Holdings";
+import MarketReference from "@/components/MarketReference";
 import WithheldPanel, { TAKER_WITHHELD } from "@/components/WithheldPanel";
 import { useWalletAccount } from "@/lib/useWalletAccount";
 import {
@@ -759,8 +760,13 @@ export default function WalletMode({
     );
   }
 
+  // Left column is the work; the right rail is standing context — reference price, what the enclave
+  // withholds, what you hold. Stacked above the steps those three scrolled away the moment a judge
+  // started working. Pinned beside the flow they stay answerable at a glance, which is the whole
+  // reason a trading screen has a rail at all.
   return (
-    <div className="mt-6 space-y-6">
+    <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-start">
+      <div className="min-w-0 space-y-6">
       {/* diagram — same visual vocabulary as DemoConsole */}
       <div className="overflow-x-auto">
         <div className="min-w-[480px] sm:min-w-0 px-2 pt-4 pb-2">
@@ -786,38 +792,6 @@ export default function WalletMode({
       </div>
 
       {/* S1 */}
-      {/* The taker's blindness is narrower than the maker's — they authored the order, so they know
-          their own side and size — but who is pricing them, and how many, stays inside the enclave
-          until it signs a match. Naming that explicitly is worth more than leaving it implied. */}
-      <WithheldPanel
-        title="The enclave withholds"
-        tagline="You set the terms. You never see who competes for them."
-        items={TAKER_WITHHELD}
-        footer="Not hidden by this screen — never sent to it. You learn a counterparty only once the enclave has signed the match that binds them to pay you."
-      />
-
-      {/* Holdings sits above the steps and outlives all of them. Funding is wallet state, not a
-          stage of the trade — as a numbered step it read like something the judge had to negotiate,
-          when in truth the desk pays for all of it. */}
-      {address && (
-        <Holdings
-          address={address}
-          fxrp={fxrp}
-          c2flr={c2flr}
-          xrp={xrplBalance}
-          onFaucet={handleFaucet}
-          faucetBusy={faucetBusy}
-          faucetDone={faucetDone}
-          faucetError={faucetError}
-          onGas={handleGas}
-          gasBusy={gasBusy}
-          gasError={gasError}
-          /* Threshold, not zero: dust is as unspendable as an empty wallet, and it matches the
-             route's GAS_ENOUGH_WEI so the button never offers a drip that would be skipped. */
-          needsGas={toNum(c2flr) < 0.1}
-        />
-      )}
-
       <StepShell n={1} title="Connect wallet" done={!!address} active>
         {!address ? (
           <>
@@ -1036,6 +1010,43 @@ export default function WalletMode({
           )}
         </div>
       </div>
+      </div>
+
+      {/* The rail. Sticky on wide screens so it survives the scroll through five steps; on narrow
+          ones the grid collapses and it simply follows the flow, which is the right fallback —
+          there is no room to pin anything on a phone. */}
+      <aside className="space-y-6 lg:sticky lg:top-6">
+        <MarketReference />
+
+        {address && (
+          <Holdings
+            address={address}
+            fxrp={fxrp}
+            c2flr={c2flr}
+            xrp={xrplBalance}
+            onFaucet={handleFaucet}
+            faucetBusy={faucetBusy}
+            faucetDone={faucetDone}
+            faucetError={faucetError}
+            onGas={handleGas}
+            gasBusy={gasBusy}
+            gasError={gasError}
+            /* Threshold, not zero: dust is as unspendable as an empty wallet, and it matches the
+               route's GAS_ENOUGH_WEI so the button never offers a drip that would be skipped. */
+            needsGas={toNum(c2flr) < 0.1}
+          />
+        )}
+
+        {/* The taker's blindness is narrower than the maker's — they authored the order, so they
+            know their own side and size — but who is pricing them, and how many, stays inside the
+            enclave until it signs a match. Naming that explicitly beats leaving it implied. */}
+        <WithheldPanel
+          title="The enclave withholds"
+          tagline="You set the terms. You never see who competes for them."
+          items={TAKER_WITHHELD}
+          footer="Not hidden by this screen — never sent to it. You learn a counterparty only once the enclave has signed the match that binds them to pay you."
+        />
+      </aside>
     </div>
   );
 }
