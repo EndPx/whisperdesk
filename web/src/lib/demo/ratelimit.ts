@@ -21,6 +21,7 @@ export type RateLimitKind =
   | "maker-faucet"
   | "maker-open-rfq"
   | "maker-join-rfq"
+  | "taker-open-rfq"
   | "maker-quote"
   | "maker-match"
   | "maker-settle"
@@ -46,6 +47,10 @@ const LIMITS: Record<RateLimitKind, Limits> = {
   // exists — so it is the one maker route that can afford a generous budget. It still needs one,
   // because the queue polls and a second maker will hit it repeatedly while deciding.
   "maker-join-rfq": { perIp: 30, global: 200 },
+  // A taker publishing their own RFQ spends the enclave's attention and a queue slot, but no desk
+  // funds — the judge's own wallet pays the relay fee and posts the deposit. Tighter than join,
+  // looser than open-rfq, which spends the desk's taker deposit every call.
+  "taker-open-rfq": { perIp: 5, global: 40 },
   // Maker mode (api/maker/*) — same reasoning, own budgets so a maker-mode abuse loop can't starve
   // (or be starved by) the one-click/wallet-mode budgets above. open-rfq spends the desk's own
   // taker-funded deposit + a relay fee; match spends a relay fee + the FTSOv2 fee on lock(); settle

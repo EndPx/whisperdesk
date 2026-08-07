@@ -22,7 +22,7 @@
 //     request body, same invariant as wallet-mode.ts's prepareStore.
 import { ethers } from "ethers";
 import { Client } from "xrpl";
-import { XRPL_TESTNET_WSS } from "./config";
+import { COSTON2_CHAIN_ID, XRPL_TESTNET_WSS } from "./config";
 import { dataHash, ethSignedDigest } from "./matchInstruction";
 import { type DemoClients, fundTakerDeposit, readLiveFtsoMid, setupClients } from "./flow";
 import { type MakerEnv } from "./makerEnv";
@@ -319,6 +319,103 @@ export async function buildOpenRfq(env: MakerEnv): Promise<OpenRfqResult> {
     approve: { token: await fxrp.getAddress(), spender: await bondLedger.getAddress(), amount: bondAmount.toString() },
     depositBond: { amount: bondAmount.toString() },
   };
+}
+
+export interface TakerRfqPrepare {
+  ciphertext: string;
+  senderAddress: string;
+  relayFeeWei: string;
+  escrow: string;
+  approve: { token: string; spender: string; amount: string };
+  deposit: { amount: string; armedUntil: string };
+}
+
+/** Seals an RFQ whose taker is the JUDGE, ready for the judge's own wallet to submit on-chain.
+ *
+ *  This is the piece that lets the two seats meet. buildOpenRfq seals an RFQ with the desk as taker
+ *  and submits it from the desk's own wallet; the maker seat then quotes against the desk. Here the
+ *  plaintext names the judge as taker and carries the judge's XRPL address, so when a maker in
+ *  another browser quotes it, the trade that settles has a real person on both sides.
+ *
+ *  The ciphertext is returned rather than submitted, because submitRfq MUST come from the taker's
+ *  own wallet: WhisperDeskInstructionSender stamps the taker from msg.sender, and that stamp is the
+ *  whole reason a taker's identity cannot be forged. Relaying it from a desk key would hand back
+ *  the very property the on-chain ingress exists to provide. */
+export async function buildTakerRfqPrepare(
+  env: MakerEnv,
+  takerAddress: string,
+  xrplAddress: string
+): Promise<TakerRfqPrepare> {
+  const clients: DemoClients = await setupClients(env, { requireOwnerIsTeeSigner: false });
+  const { escrow, fxrp, ftso } = clients;
+
+  const minBlock: bigint = await escrow.MIN_BLOCK_FXRP();
+  const { mid18 } = await readLiveFtsoMid(ftso);
+  const takerLimit = (mid18 * TAKER_LIMIT_NUM) / TAKER_LIMIT_DEN;
+
+  const ciphertext = await wdEncrypt(env, {
+    v: 1,
+    taker: takerAddress,
+    side: "SELL_FXRP",
+    fxrpAmountRaw: minBlock.toString(),
+    limitPriceUsdE18: takerLimit.toString(),
+    xrplAddress,
+  });
+
+  const escrowAddress = await escrow.getAddress();
+  const armedUntil = Math.floor(Date.now() / 1000) + MAKER_MODE_ARMED_SECONDS + 300;
+
+  return {
+    ciphertext,
+    senderAddress: env.senderAddress,
+    relayFeeWei: env.relayFeeWei.toString(),
+    escrow: escrowAddress,
+    approve: { token: await fxrp.getAddress(), spender: escrowAddress, amount: minBlock.toString() },
+    deposit: { amount: minBlock.toString(), armedUntil: String(armedUntil) },
+  };
+}
+
+/** Reads back the judge's own submitRfq receipt, waits for the enclave to ack it, and publishes the
+ *  resulting rfqId into the shared queue so makers can find it.
+ *
+ *  The taker stamped in SealedRfqSubmitted is checked against the address that claims to have sent
+ *  it. That check is not ceremony: it is the difference between "this RFQ belongs to you" and "you
+ *  told us it does". */
+export async function confirmTakerRfq(
+  env: MakerEnv,
+  txHash: string,
+  takerAddress: string
+): Promise<{ rfqId: string; windowEndsAt: number }> {
+  const provider = new ethers.JsonRpcProvider(env.coston2Rpc, COSTON2_CHAIN_ID);
+  const receipt = await provider.getTransactionReceipt(txHash);
+  if (!receipt) throw new Error("submitRfq() transaction not found or not mined yet");
+  if (receipt.status !== 1) throw new Error("submitRfq() reverted");
+
+  const sender = new ethers.Contract(env.senderAddress, SENDER_ABI, provider);
+  const sealed = receipt.logs
+    .map((l) => {
+      try {
+        return sender.interface.parseLog(l);
+      } catch {
+        return null;
+      }
+    })
+    .find((e): e is ethers.LogDescription => e !== null && e.name === "SealedRfqSubmitted");
+  if (!sealed) throw new Error("SealedRfqSubmitted not found in that receipt — wrong transaction?");
+
+  if ((sealed.args.taker as string).toLowerCase() !== takerAddress.toLowerCase()) {
+    throw new Error("that RFQ was submitted by a different address");
+  }
+
+  const instructionId = sealed.args.instructionId as string;
+  const result = await pollActionResult(env.extProxyUrl, instructionId, { timeoutMs: 60_000 });
+  if (result.status !== 1) {
+    throw new Error(`RFQ_SUBMIT failed: status=${result.status} log=${JSON.stringify(result.log)}`);
+  }
+  const ack = decodeActionPayload<RfqAck>(result);
+
+  putRfqRecord(ack.rfqId, ack.windowEndsAt);
+  return { rfqId: ack.rfqId, windowEndsAt: ack.windowEndsAt };
 }
 
 /** The same payload as buildOpenRfq, but for an RFQ someone ELSE already opened.
