@@ -2,8 +2,8 @@
 
 All addresses, transactions, and infrastructure below are **Coston2** (chainId `114`) and
 **XRPL Testnet** only. Every row in this page is a live, independently verifiable artifact — not a
-claim. Where the README frames a limit (simulated-TEE, MockFXRP in the interactive demo, the
-1-FXRP testnet override), this page states it plainly rather than smoothing it over.
+claim. Where the README frames a limit (simulated-TEE attestation, the 1-FXRP testnet override),
+this page states it plainly rather than smoothing it over.
 
 ## Live infrastructure
 
@@ -13,10 +13,11 @@ claim. Where the README frames a limit (simulated-TEE, MockFXRP in the interacti
 | FCE extension ID | `0x…010069` (65641) |
 | WhisperDeskInstructionSender | `0x56A903F408C4745D34354Ec230BbfBDD78eC6426` |
 | Live TEE signer | `0x56564F61588bB110E0712c3938aDa4338e6cc18B` |
-| DvPEscrow — **public one-click demo** | `0x5f32783D629E2acBb83f16628ad76D02A26CFB9B` |
-| DvPEscrow — **enclave loop** (`teeSigner` = the live enclave) | `0x20A885cb6ed3F652C5Fcb6a683CE74436F6a7023` |
-| MockFXRP (mintable, 6 dec) | `0x700bfC3620585eb42F1Dda6aBA3Ac8E793859FBE` |
-| BondLedger | `0xC2f2F46A126E542E8178e2cc8fdC13aF3A48E156` |
+| DvPEscrow — **one-click seat** (`teeSigner` = owner, which self-signs its match) | `0x78768737b4AfD0e2Fd3676E8dA55E5ff1155fB5c` |
+| DvPEscrow — **open desk** (`teeSigner` = the live enclave) | `0xB3C762634a86991A1e56530056dA05068DE2044C` |
+| FXRP — genuine FAssets asset (`FTestXRP`, 6 dec) | `0x0b6A3645c240605887a5532109323A3E12273dc7` |
+| BondLedger — one-click | `0xc90B84FDAB441149402AB86b0AaF9F7B4518F32B` |
+| BondLedger — open desk | `0x72A577AddB04ff29C40107De927621E4Fb44c638` |
 | FtsoV2 (real Coston2 registry) | `0xC4e9c78EA53db782E28f28Fdf80BaF59336B304d` |
 | FdcVerification (real) | `0x906507E0B64bcD494Db73bd0459d1C667e14B933` |
 
@@ -189,10 +190,11 @@ then point `happy-path.mjs` at the printed escrow.
 
 ## Scope, stated plainly
 
-- **The interactive demo settles a MockFXRP test token** (mintable, unbacked) — the demo faucet has
-  to hand every visitor FXRP, and the real asset cannot be conjured per visitor. The mechanism
-  itself is not mock-bound: the real-FXRP run above proves it against the genuine FAssets asset on
-  a second escrow instance.
+- **The demo settles the genuine FAssets asset** (`FTestXRP`, 6 dec) on both escrows. A mintable
+  stand-in used to sit here, because a demo faucet has to fund every visitor and the real asset
+  cannot be conjured per visitor — until Flare's own faucet turned out to hand out 10 FXRP per
+  address per day. Both escrows were redeployed against the real token and the mock retired.
+  Nothing the desk runs can mint FXRP; it exists only against XRP locked in FAssets.
 - **The enclave runs in simulated-TEE mode** (attestation `magic_pass`, `SIMULATED_TEE=true`) — the
   path Flare states is eligible for judging; GCP Confidential Space is not required. The full
   onchain registration sits on top of it regardless: our own extension (`65641`), a TEE machine

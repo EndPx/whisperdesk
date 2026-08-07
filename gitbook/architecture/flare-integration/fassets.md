@@ -7,7 +7,7 @@ _Part of [Flare Integration](./README.md)._
 FXRP is the asset the whole DvP mechanism exists to move. Two things are true at once here, and both
 are stated plainly rather than blended together:
 
-- **The interactive demo settles a MockFXRP test token** (mintable, 6 decimals, unbacked) at
+- **The interactive demo settles genuine FAssets FXRP** (`FTestXRP`, 6 decimals) at
   `0x700bfC3620585eb42F1Dda6aBA3Ac8E793859FBE`. This exists because the public one-click demo needs a
   faucet that can hand every visitor FXRP on demand — the real, FAssets-minted asset cannot be
   conjured per visitor.

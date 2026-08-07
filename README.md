@@ -21,11 +21,13 @@ https://fce.endpx.cloud/info
 
 This is a hackathon prototype, and these are its scope boundaries, not apologies:
 
-- **The interactive demo settles a MockFXRP test token** (mintable, unbacked) — the demo faucet has
-  to hand every visitor FXRP, and the real asset cannot be conjured per visitor. The mechanism
-  itself is not mock-bound: **two full settlements have now run against the real FAssets-minted FXRP**
-  (`AssetManagerFXRP.fAsset()` = [`0x0b6A3645…3dc7`](https://coston2-explorer.flare.network/address/0x0b6A3645c240605887a5532109323A3E12273dc7),
-  6 decimals, same units) on a second escrow instance — receipts below.
+- **The demo settles genuine FAssets FXRP** — `FTestXRP`, `AssetManagerFXRP.fAsset()` =
+  [`0x0b6A3645…3dc7`](https://coston2-explorer.flare.network/address/0x0b6A3645c240605887a5532109323A3E12273dc7),
+  6 decimals — on both escrows. There is no mock. One was there because a demo faucet has to fund
+  every visitor and the real asset cannot be conjured per visitor; Flare's own faucet turns out to
+  hand out 10 FXRP per address per day, so the workaround was retired and both escrows redeployed
+  against the real token. Nothing we run can mint it: FXRP exists only against XRP locked in
+  FAssets, which is exactly what makes settling it worth anything.
 - **The enclave runs in simulated-TEE mode** (attestation `magic_pass`, `SIMULATED_TEE=true`) — the
   path Flare states is eligible for judging; GCP Confidential Space is not required. We still did the
   full onchain registration on top of it: our own extension (`65641`), a TEE machine registered and
@@ -107,7 +109,9 @@ registered onchain is the one actually serving. Exit 0 means all four passed.
 | Live TEE signer | `0x56564F61588bB110E0712c3938aDa4338e6cc18B` |
 | DvPEscrow — **public one-click demo** | `0x5f32783D629E2acBb83f16628ad76D02A26CFB9B` |
 | DvPEscrow — **enclave loop** (`teeSigner` = the live enclave) | `0x20A885cb6ed3F652C5Fcb6a683CE74436F6a7023` |
-| MockFXRP (mintable, 6 dec) | `0x700bfC3620585eb42F1Dda6aBA3Ac8E793859FBE` |
+| DvPEscrow — open desk (teeSigner = live enclave) | `0xB3C762634a86991A1e56530056dA05068DE2044C` |
+| DvPEscrow — one-click (teeSigner = owner) | `0x78768737b4AfD0e2Fd3676E8dA55E5ff1155fB5c` |
+| FXRP (FAssets, `FTestXRP`, 6 dec) | `0x0b6A3645c240605887a5532109323A3E12273dc7` |
 | BondLedger | `0xC2f2F46A126E542E8178e2cc8fdC13aF3A48E156` |
 | FtsoV2 (real Coston2 registry) | `0xC4e9c78EA53db782E28f28Fdf80BaF59336B304d` |
 | FdcVerification (real) | `0x906507E0B64bcD494Db73bd0459d1C667e14B933` |
@@ -340,7 +344,7 @@ custody.
 What it would take to make this real, in order:
 
 1. Onchain `submitRfq` ingress — `WhisperDeskInstructionSender.submitRfq` binds `msg.sender`, removing the self-attested taker in `POST /direct`.
-2. Real FAssets FXRP — replace MockFXRP with an actual FAssets-minted FXRP position.
+2. ~~Real FAssets FXRP~~ — done: both escrows settle the FAssets asset directly.
 3. Persistent TEE identity + real attestation — replace `magic_pass` with genuine remote attestation and a key that survives restarts.
 4. Maker onboarding — let more than one maker register into the sealed book, not just the demo pair.
 5. Multi-RFQ book — support concurrent open RFQs and matches, not one trade at a time.

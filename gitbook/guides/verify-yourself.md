@@ -91,7 +91,7 @@ then point `happy-path.mjs` at the printed escrow address.
 **What it proves:** the same mechanism, the same commands, settling against the genuine
 FAssets-minted FXRP (`AssetManagerFXRP.fAsset()`,
 [`0x0b6A3645…3dc7`](https://coston2-explorer.flare.network/address/0x0b6A3645c240605887a5532109323A3E12273dc7),
-symbol `FTestXRP`) instead of the demo's MockFXRP — proof that the DvP logic isn't mock-bound.
+symbol `FTestXRP`) — the same asset the live demo now settles on every seat.
 
 > **Not runnable from a standalone clone:** `extension/matcher`'s Go parity tests and
 > `extension/smoketest/` resolve `tee-node` through a `replace` directive pointing at Flare's

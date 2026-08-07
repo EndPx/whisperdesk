@@ -693,8 +693,8 @@ npm run happy-path`}
             setSeated(true);
           }}
         />
-        {/* Sits at the door, under the seats: every seat here settles MockFXRP, so the evidence
-            that the mechanism is not mock-bound belongs next to that fact, not three clicks away. */}
+        {/* Sits at the door, under the seats. It used to answer "but is that a real asset?" for
+            seats that traded a mock; now it simply shows the receipts for the asset they settle. */}
         <RealAssetProof />
       </>
     );

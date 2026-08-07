@@ -33,7 +33,7 @@ claim on this site carries an explorer link next to it.
 **Try it:** https://whisperdesk.endpx.cloud
 **Live enclave:** https://fce.endpx.cloud/info
 
-> **Scope.** The public demo settles a mintable MockFXRP so the faucet can fund every visitor, sized
+> **Scope.** The public demo settles genuine FAssets FXRP — visitors fund themselves from Flare's faucet — sized
 > at 1 FXRP against the desk's 5,000 FXRP policy minimum, with the enclave in the simulated-TEE mode
 > Flare states is eligible for judging. [Trust model](architecture/trust-model.md) sets out each
 > choice and exactly what it costs.

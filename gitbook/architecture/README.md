@@ -47,16 +47,16 @@ every restart by design, which is exactly what `scripts/enclave-loop/monitor.mjs
 | DvPEscrow — public one-click demo | `0x5f32783D629E2acBb83f16628ad76D02A26CFB9B` |
 | DvPEscrow — enclave loop (`teeSigner` = the live enclave) | `0x20A885cb6ed3F652C5Fcb6a683CE74436F6a7023` |
 | BondLedger | `0xC2f2F46A126E542E8178e2cc8fdC13aF3A48E156` |
-| MockFXRP (mintable, 6 dec) | `0x700bfC3620585eb42F1Dda6aBA3Ac8E793859FBE` |
+| DvPEscrow — open desk (teeSigner = live enclave) | `0xB3C762634a86991A1e56530056dA05068DE2044C` |
+| DvPEscrow — one-click (teeSigner = owner) | `0x78768737b4AfD0e2Fd3676E8dA55E5ff1155fB5c` |
+| FXRP (FAssets, `FTestXRP`, 6 dec) | `0x0b6A3645c240605887a5532109323A3E12273dc7` |
 | Real FAssets FXRP (`FTestXRP`) | [`0x0b6A3645…3dc7`](https://coston2-explorer.flare.network/address/0x0b6A3645c240605887a5532109323A3E12273dc7) |
 
 `lock()` re-checks the FTSOv2 price band and posts a 1% maker bond via `BondLedger`; `release()`
 pays FXRP against an FDC proof bound to that exact escrow instance; `refund()` is permissionless
 after `refundAfter + REFUND_GRACE` and slashes the bond to the taker.
 
-The interactive demo settles against MockFXRP (mintable, unbacked) because the demo faucet has to
-fund every visitor and the real asset can't be conjured per visitor. The mechanism itself is not
-mock-bound — it has settled twice against the real FAssets-minted FXRP above, on a dedicated
+The interactive demo settles the genuine FAssets asset above. Flare's own faucet supplies visitors, so no stand-in is needed; earlier runs also settled it on a dedicated
 escrow instance.
 
 ## 5. FTSOv2 / FDC / XRPL

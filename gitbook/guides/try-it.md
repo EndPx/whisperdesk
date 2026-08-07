@@ -9,11 +9,7 @@ request.
 
 ## Before you start
 
-Every trade here is **1 FXRP** and settles in **MockFXRP**, for one practical reason: the faucet has
-to fund every visitor on request, and a faucet-funded XRPL account cannot cover the ~5,000 XRP
-counter-payment the desk's real 5,000 FXRP minimum would demand. None of that is baked into the
-mechanism — the same code, the same commands, have settled against genuine FAssets-minted FXRP.
-Receipts are in [Contracts & receipts](../reference/contracts-and-receipts.md).
+Every trade here is **1 FXRP** and settles in **genuine FAssets FXRP**. Get yours from [Flare's faucet](https://faucet.flare.network/) — 10 per address per day. Nobody can mint it on demand, which is exactly what makes it worth settling. Receipts are in [Contracts & receipts](../reference/contracts-and-receipts.md).
 
 ## Pick a seat
 

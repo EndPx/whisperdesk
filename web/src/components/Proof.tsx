@@ -53,9 +53,9 @@ const GUARANTEES: Guarantee[] = [
   {
     id: "P4",
     kicker: "Real asset",
-    claim: "The same machinery settles genuine FXRP",
+    claim: "The desk settles genuine FXRP",
     body:
-      "One settlement ran against FAssets-minted FXRP that we minted ourselves through the protocol, from our own XRP into the Core Vault. The interactive demo keeps a mintable stand-in only because a faucet cannot conjure the real token for every visitor.",
+      "Every seat in the live demo settles FAssets-minted FXRP — no mock, no stand-in. The first supply came from XRP we sent into the Core Vault ourselves; visitors get theirs from Flare's own faucet, which is what let the placeholder go entirely.",
     badge: "real FXRP released to the maker",
     tx: "0x9ea7…aea3",
     href: `${EXPLORER}/tx/0x9ea70cafebbf0e6b937216af9cea374d798e6eb0466b7104fe40fd7e256aaea3`,

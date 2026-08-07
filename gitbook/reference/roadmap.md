@@ -2,7 +2,7 @@
 
 WhisperDesk's core mechanism — seal an RFQ in a TEE, match it blind, settle FXRP against an
 FDC-proven XRPL payment or slash the maker's bond — has run end to end on Coston2 + XRPL Testnet,
-including twice against the real FAssets-minted FXRP, not just the demo's MockFXRP. What has not
+on the genuine FAssets-minted FXRP that every seat now settles. What has not
 happened yet is turning that proven mechanism into a live desk that trades institutional size on
 mainnet. This page lays out that distance, in the order it needs to be closed.
 
@@ -10,7 +10,7 @@ mainnet. This page lays out that distance, in the order it needs to be closed.
 |---|---|---|
 | Hardware TEE | Simulated-TEE mode (attestation `magic_pass`, `SIMULATED_TEE=true`), fully registered onchain — extension `65641`, TEE machine at `PRODUCTION` status, registry-enforced instruction sender | GCP Confidential Space with genuine remote attestation, and a signing key that survives a restart |
 | Real-size blocks | Canonical policy is a 5,000 FXRP minimum block; the deployed integration instance overrides `MIN_BLOCK_FXRP` to `1e6` (1 FXRP), because a 5,000-FXRP block needs ~5,000 XRP of counter-payment and a faucet-funded XRPL testnet account can't move that | Liquidity and counter-payment capacity that lets the desk operate at the canonical minimum, not the testnet override |
-| Full FAssets integration | The interactive demo settles MockFXRP (mintable, unbacked) so the faucet can fund every visitor; a separate escrow instance has settled twice against real FAssets-minted FXRP via a v1.3 direct mint we initiated ourselves | Settle the demo itself in real FXRP, with direct mint/redeem wired into the desk instead of a manual, one-off mint |
+| Full FAssets integration | Every seat settles the genuine FAssets asset (`FTestXRP`) on both escrows; visitors fund themselves from Flare's faucet, and the desk's own supply came from a v1.3 direct mint it initiated | Wire direct mint/redeem into the desk itself, so it can source and return FXRP without a manual step |
 | Multi-maker RFQ auctions | The matcher already takes many quotes per sealed RFQ and awards the best price (ties broken by arrival), covered by unit tests — but every settlement demonstrated live so far has been one maker against one taker | A live run with two independent makers on one sealed RFQ, then selective disclosure so an auditor can verify compliance facts without the plaintext RFQ, quote, or counterparty identity ever leaving the enclave |
 | Mainnet path | Every address, transaction, and receipt in this repo is Coston2 + XRPL Testnet only; not audited, not production custody | Songbird first, then Flare mainnet, gated on a security review — no mainnet deploy before that review clears |
 
@@ -32,13 +32,15 @@ demo](https://whisperdesk.endpx.cloud) is a 1-FXRP trade under that override.
 
 ## Full FAssets integration
 
-The demo runs on MockFXRP for a practical reason — the desk cannot conjure real
-[FAssets-minted FXRP](https://coston2-explorer.flare.network/address/0x0b6A3645c240605887a5532109323A3E12273dc7)
-for every visitor's faucet claim. But the mechanism isn't mock-bound: two full settlements have already
-run against the genuine asset on a
-[dedicated escrow instance](https://coston2-explorer.flare.network/address/0xfa0895ce6af9ef9764afbb967d822dadc13ae087),
-funded by a direct mint we initiated on the real protocol. Next is folding that mint/redeem path
-into the desk itself, and settling the public demo on the same asset.
+The demo runs on the genuine asset. Both escrows settle
+[FAssets-minted FXRP](https://coston2-explorer.flare.network/address/0x0b6A3645c240605887a5532109323A3E12273dc7),
+and the desk still cannot conjure it — nobody can. What changed is where visitors get theirs:
+Flare's own faucet hands out 10 per address per day, which removed the reason a mintable stand-in
+existed at all. The desk's own supply came from a v1.3 direct mint it initiated on the real
+protocol, sending XRP into the Core Vault like any other minter.
+
+What is left is folding that mint/redeem path into the desk itself, so it can source and return
+FXRP as part of running, rather than as a manual step an operator performs beforehand.
 
 ## Multi-maker RFQ auctions
 

@@ -52,14 +52,7 @@ the other's job.
   `scripts/enclave-loop/monitor.mjs` runs as a cron healthcheck specifically to watch for that key
   rotation, alongside asserting the escrow trusts the running enclave's key, the registry routes
   instructions to it, and its machine status is `PRODUCTION`.
-- **MockFXRP in the interactive demo.** The public one-click demo settles a mintable, unbacked
-  MockFXRP test token (`0x700bfC3620585eb42F1Dda6aBA3Ac8E793859FBE`), because the demo faucet has
-  to hand every visitor FXRP and the real asset cannot be conjured per visitor. The mechanism itself
-  is not mock-bound: two full settlements have now run against the real FAssets-minted FXRP
-  (`AssetManagerFXRP.fAsset()` =
-  [`0x0b6A3645…3dc7`](https://coston2-explorer.flare.network/address/0x0b6A3645c240605887a5532109323A3E12273dc7))
-  on a separate escrow instance, using a v1.3 direct mint acquired the way the protocol intends —
-  see the receipts on the [Overview](README.md) page.
+- **Real FAssets FXRP throughout.** Both escrows settle `FTestXRP` ([`0x0b6A3645…3dc7`](https://coston2-explorer.flare.network/address/0x0b6A3645c240605887a5532109323A3E12273dc7)), the genuine FAssets asset. Visitors fund themselves from Flare's faucet; nobody — including the desk — can mint it on demand, because it exists only against XRP locked in FAssets.
 - **One `teeSigner` key per escrow instance.** Each `DvPEscrow` deployment trusts exactly one
   signing key (e.g. the public-demo escrow `0x5f32783D…CFB9B` vs. the enclave-loop escrow
   `0x20A885cb…7023`, whose `teeSigner` is the live enclave). Trust is scoped per instance, not
