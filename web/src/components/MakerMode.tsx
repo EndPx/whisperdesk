@@ -6,6 +6,7 @@ import { BalanceRow, IconCheck, PartyCard, Rail, type PillSpec } from "@/compone
 import WithheldPanel, { MAKER_WITHHELD } from "@/components/WithheldPanel";
 import Holdings from "@/components/Holdings";
 import MarketReference from "@/components/MarketReference";
+import AuctionRule from "@/components/AuctionRule";
 import { useWalletAccount } from "@/lib/useWalletAccount";
 import {
   connect,
@@ -1651,8 +1652,12 @@ export default function MakerMode({
       {/* The rail. Sticky on wide screens so it survives the scroll through six steps; on narrow
           ones the grid collapses and it simply follows the flow, which is the right fallback —
           there is no room to pin anything on a phone. */}
-      <aside className="space-y-6 lg:sticky lg:top-6">
+      <aside className="space-y-4 lg:sticky lg:top-6">
         <MarketReference />
+
+        {/* Sits above the withheld list on purpose: that panel says what a maker is not told, this
+            one says why losing here costs nothing — which is the reason quoting honestly is safe. */}
+        <AuctionRule />
 
         {address && (
           <Holdings

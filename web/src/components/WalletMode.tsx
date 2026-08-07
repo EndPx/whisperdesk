@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { BalanceRow, IconCheck, PartyCard, Rail, type PillSpec } from "@/components/flow/parts";
 import Holdings from "@/components/Holdings";
 import MarketReference from "@/components/MarketReference";
+import AuctionRule from "@/components/AuctionRule";
 import WithheldPanel, { TAKER_WITHHELD } from "@/components/WithheldPanel";
 import { useWalletAccount } from "@/lib/useWalletAccount";
 import {
@@ -1192,8 +1193,12 @@ export default function WalletMode({
       {/* The rail. Sticky on wide screens so it survives the scroll through five steps; on narrow
           ones the grid collapses and it simply follows the flow, which is the right fallback —
           there is no room to pin anything on a phone. */}
-      <aside className="space-y-6 lg:sticky lg:top-6">
+      <aside className="space-y-4 lg:sticky lg:top-6">
         <MarketReference />
+
+        {/* A taker not being offered a list of quotes to choose from looks like a missing feature
+            until the reason is on screen. It belongs in this seat more than the maker's. */}
+        <AuctionRule />
 
         {address && (
           <Holdings
