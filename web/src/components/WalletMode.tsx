@@ -13,7 +13,6 @@ import {
   sendApprove,
   sendDeposit,
   sendLock,
-  sendSubmitRfq,
   WalletRejectionError,
 } from "@/lib/wallet-client";
 
@@ -193,7 +192,7 @@ export default function WalletMode({
 
   // Publishing to the open desk — the path where a real maker, not the desk, fills you.
   const [publishStage, setPublishStage] = useState<
-    "idle" | "sealing" | "approving" | "depositing" | "submitting" | "confirming" | "waiting"
+    "idle" | "sealing" | "approving" | "depositing" | "submitting" | "waiting"
   >("idle");
   const [publishError, setPublishError] = useState<string | null>(null);
   const [publishedRfqId, setPublishedRfqId] = useState<string | null>(null);
@@ -384,10 +383,11 @@ export default function WalletMode({
      shared queue instead, so whoever is sitting in a maker seat can quote it —
      which is the only way two independent people end up on one trade.
 
-     submitRfq goes out from the judge's own wallet on purpose. The sender
-     contract stamps the taker from msg.sender, and that stamp is what makes a
-     taker's identity unforgeable; relaying it from a desk key would hand back
-     the property the whole on-chain ingress exists to provide.
+     Two transactions here are yours and cannot be anyone else's: the approve
+     and the deposit. They are what put real FXRP behind the order, and the
+     escrow reserves the fill from that balance and no other. Sealing and
+     submission are the desk's to relay — see the publish route's own comment
+     for why that trade costs attribution rather than safety.
   ------------------------------------------------------------------------ */
 
   const runPublishRfq = useCallback(async () => {
@@ -396,22 +396,18 @@ export default function WalletMode({
     try {
       setPublishStage("sealing");
       const prep = await postJSON<{
-        ciphertext: string;
-        senderAddress: string;
-        relayFeeWei: string;
         escrow: string;
         approve: { token: string; spender: string; amount: string };
         deposit: { amount: string; armedUntil: string };
         error?: string;
         enabled?: boolean;
-      }>("/api/taker/rfq/prepare", { taker: address, xrplAddress });
+      }>("/api/taker/rfq/prepare", {});
       if (prep.status === 503 || prep.data?.enabled === false) {
         setEnabled(false);
         setPublishStage("idle");
         return;
       }
-      if (!prep.ok || !prep.data) throw new Error(prep.data?.error ?? "could not seal the RFQ");
-      addLog("RFQ sealed to the enclave — its contents never touch this browser.", { tone: "muted" });
+      if (!prep.ok || !prep.data) throw new Error(prep.data?.error ?? "could not reach the desk");
 
       // The top-up call that used to sit here is gone with the mock. Both escrows now hold genuine
       // FAssets FXRP, which nothing we run can mint — it exists only against XRP locked in FAssets.
@@ -421,29 +417,18 @@ export default function WalletMode({
 
       setPublishStage("depositing");
       const depositTx = await sendDeposit(prep.data.escrow, prep.data.deposit);
-      addLog("FXRP deposited and armed", {
+      addLog("FXRP deposited and armed — your fill can only come out of this balance", {
         href: COSTON2_TX(depositTx),
         linkText: shortHash(depositTx),
       });
 
       setPublishStage("submitting");
-      const rfqTx = await sendSubmitRfq({
-        senderAddress: prep.data.senderAddress,
-        ciphertext: prep.data.ciphertext,
-        relayFeeWei: prep.data.relayFeeWei,
-      });
-      addLog("submitRfq() sent from your wallet — the taker is stamped from msg.sender", {
-        href: COSTON2_TX(rfqTx),
-        linkText: shortHash(rfqTx),
-        tone: "success",
-      });
-
-      setPublishStage("confirming");
       const conf = await postJSON<{ rfqId: string; windowEndsAt: number; error?: string }>(
-        "/api/taker/rfq/confirm",
-        { txHash: rfqTx, taker: address }
+        "/api/taker/rfq/publish",
+        { taker: address, xrplAddress }
       );
       if (!conf.ok || !conf.data?.rfqId) throw new Error(conf.data?.error ?? "the enclave did not ack the RFQ");
+      addLog("Order sealed to the enclave — its contents never touched this browser.", { tone: "muted" });
 
       setPublishedRfqId(conf.data.rfqId);
       setPublishStage("waiting");
@@ -1020,13 +1005,13 @@ export default function WalletMode({
                 ? "Retry publish"
                 : "Publish my RFQ"
               : publishStage === "sealing"
-                ? "Sealing to the enclave…"
+                ? "Reading the escrow…"
                 : publishStage === "approving"
                   ? "Confirm approve in wallet…"
                   : publishStage === "depositing"
                     ? "Confirm deposit in wallet…"
                     : publishStage === "submitting"
-                      ? "Confirm submitRfq in wallet…"
+                      ? "Sealing to the enclave…"
                       : "Waiting for the enclave…"}
           </button>
           {publishError && <p className="mono-label text-[0.6rem] text-iron-red mt-3">{publishError}</p>}

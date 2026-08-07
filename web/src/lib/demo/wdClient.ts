@@ -101,10 +101,22 @@ export async function wdEncrypt(makerEnv: MakerEnv, plaintext: unknown): Promise
   return out;
 }
 
-/// Submits a QUOTE_SUBMIT over POST /direct with an already-sealed ciphertext (see wdEncrypt) and
-/// returns the resulting actionId (poll it with pollActionResult(..., {tag:"submit"}) in maker.ts).
-export async function wdSubmitQuote(makerEnv: MakerEnv, ciphertextHex: string): Promise<string> {
-  const out = await runWdClient(makerEnv, ["submit", "--op-command", "QUOTE_SUBMIT", "--message", ciphertextHex], undefined, 20_000);
+/// POSTs `messageHex` to /direct under `opCommand` and returns the resulting actionId. Every
+/// /direct result is polled with pollActionResult(..., {tag:"submit"}) — the submissionTag the proxy
+/// files direct submissions under, regardless of which opCommand they carry.
+///
+/// The message's shape is per-command and NOT interchangeable (PROTOCOL.md §5):
+///   - QUOTE_SUBMIT — a bare ECIES blob (wdEncrypt output).
+///   - RFQ_SUBMIT   — abi.encode(address sender, bytes ciphertext), the sender envelope.
+///   - RFQ_MATCH    — the bare 32-byte rfqId, unsealed (the trigger carries no secret).
+/// Callers build the right one; this function only carries bytes.
+async function wdSubmitDirect(makerEnv: MakerEnv, opCommand: string, messageHex: string): Promise<string> {
+  const out = await runWdClient(
+    makerEnv,
+    ["submit", "--op-command", opCommand, "--message", messageHex],
+    undefined,
+    20_000
+  );
   let action: unknown;
   try {
     action = JSON.parse(out);
@@ -117,4 +129,32 @@ export async function wdSubmitQuote(makerEnv: MakerEnv, ciphertextHex: string): 
     throw new Error(`wd-client submit: could not read action id from output: ${out.slice(0, 200)}`);
   }
   return id;
+}
+
+/// Submits a QUOTE_SUBMIT with an already-sealed ciphertext (see wdEncrypt).
+export async function wdSubmitQuote(makerEnv: MakerEnv, ciphertextHex: string): Promise<string> {
+  return wdSubmitDirect(makerEnv, "QUOTE_SUBMIT", ciphertextHex);
+}
+
+/// Submits an RFQ_SUBMIT with a sender envelope (see maker.ts's encodeRfqEnvelope).
+///
+/// This ingress is the demo bypass, gated by WD_ALLOW_DIRECT_RFQ on the enclave and independently by
+/// the proxy's API key. The canonical ingress is an onchain WhisperDeskInstructionSender.submitRfq,
+/// where the taker is stamped from msg.sender and cannot be claimed; here the sender in the envelope
+/// is self-attested. What that does and does not cost is written out in maker.ts's publishTakerRfq —
+/// read it before treating the two ingresses as equivalent.
+export async function wdSubmitRfq(makerEnv: MakerEnv, envelopeHex: string): Promise<string> {
+  return wdSubmitDirect(makerEnv, "RFQ_SUBMIT", envelopeHex);
+}
+
+/// Triggers matching for `rfqId` — the message is the bare 32-byte id, raw and unsealed.
+///
+/// Unlike the RFQ ingress, this one gives nothing away by being direct: RFQ_MATCH is permissionless
+/// on both ingresses (PROTOCOL.md §1), carries no secret (the rfqId is already public), and names no
+/// party. Whoever fires it, the enclave runs the same matcher over the same sealed book.
+export async function wdTriggerMatch(makerEnv: MakerEnv, rfqId: string): Promise<string> {
+  if (!/^0x[0-9a-fA-F]{64}$/.test(rfqId)) {
+    throw new Error(`wd-client submit: rfqId must be a 32-byte hex string, got ${rfqId.slice(0, 20)}`);
+  }
+  return wdSubmitDirect(makerEnv, "RFQ_MATCH", rfqId);
 }

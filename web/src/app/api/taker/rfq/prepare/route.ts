@@ -1,16 +1,13 @@
-// POST /api/taker/rfq/prepare — seal an RFQ whose taker is the judge, for the judge's wallet to
-// submit itself.
+// POST /api/taker/rfq/prepare — the escrow parameters a taker funds before publishing.
 //
-// This is the half that lets the two seats meet. Until now a taker could only trade against the
-// desk: /api/wallet/prepare has the desk sign the match as maker. Here the judge publishes a sealed
-// RFQ into the shared queue instead, and whoever is sitting in a maker seat can quote it — so the
-// trade that settles has an independent person on each side.
+// Funding comes first for a reason: an RFQ with no deposit behind it can be matched but never
+// locked, because lock() reserves the FXRP from the taker's own armed balance. Arming it up front is
+// what makes the published order real rather than a claim.
 //
-// The ciphertext comes back rather than going straight out, because submitRfq must be sent by the
-// taker's own wallet. WhisperDeskInstructionSender stamps the taker from msg.sender, and relaying it
-// from a desk key would throw away exactly the property that makes a taker's identity unforgeable.
+// Nothing order-shaped crosses this route. It returns the token, the escrow, and MIN_BLOCK_FXRP —
+// the same three constants every RFQ on this desk uses — so a network observer learns that someone
+// is about to trade, and nothing whatsoever about what.
 import { NextResponse } from "next/server";
-import { ethers } from "ethers";
 import { buildTakerRfqPrepare } from "@/lib/demo/maker";
 import { getMakerEnv } from "@/lib/demo/makerEnv";
 import { errMessage } from "@/lib/demo/http";
@@ -30,21 +27,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "rate limited — try again shortly" }, { status: 429 });
   }
 
-  let taker: string;
-  let xrplAddress: string;
   try {
-    const body = await request.json();
-    taker = ethers.getAddress(body?.taker); // throws on malformed/bad-checksum input
-    if (typeof body?.xrplAddress !== "string" || !/^r[1-9A-HJ-NP-Za-km-z]{24,34}$/.test(body.xrplAddress)) {
-      return NextResponse.json({ error: "body.xrplAddress must be a classic XRPL address" }, { status: 400 });
-    }
-    xrplAddress = body.xrplAddress;
-  } catch {
-    return NextResponse.json({ error: "body.taker must be a valid EVM address" }, { status: 400 });
-  }
-
-  try {
-    return NextResponse.json(await buildTakerRfqPrepare(env, taker, xrplAddress));
+    return NextResponse.json(await buildTakerRfqPrepare(env));
   } catch (err) {
     return NextResponse.json({ error: errMessage(err) }, { status: 500 });
   }
