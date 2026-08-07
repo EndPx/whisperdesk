@@ -1167,7 +1167,9 @@ export default function WalletMode({
           className="max-h-[360px] overflow-y-auto space-y-2 border-t border-steel-line pt-4"
         >
           {log.length === 0 ? (
-            <p className="mono-data text-[0.8rem] text-ink-3">Waiting for step 1…</p>
+            {/* Not "waiting for step 1" — there are no numbered steps left to wait for, and a
+                console naming one describes a wizard that no longer exists. */}
+            <p className="mono-data text-[0.8rem] text-ink-3">Idle — nothing sent yet.</p>
           ) : (
             log.map((line) => (
               <div key={line.id} className="mono-data text-[0.8rem] flex flex-wrap items-baseline gap-x-2">
