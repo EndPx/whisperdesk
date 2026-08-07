@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "body.address is not a valid EVM address" }, { status: 400 });
   }
 
-  if (!checkAndRecordFaucetClaim(address)) {
+  if (!checkAndRecordFaucetClaim(address, "maker")) {
     return NextResponse.json({ error: "faucet already claimed for this address in the last 10 minutes" }, {
       status: 429,
     });

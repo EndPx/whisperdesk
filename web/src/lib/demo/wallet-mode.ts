@@ -35,18 +35,28 @@ export const FAUCET_MINT_HUMAN = "2";
 export const FAUCET_MINT_RAW = BigInt(2_000_000); // 2 * 10^6, MockFXRP is 6-dec (matches abi.ts/flow.ts)
 const FAUCET_RATE_LIMIT_MS = 10 * 60 * 1000;
 
-const lastFaucetClaim = new Map<string, number>(); // lowercased address -> claimedAt ms
+export type FaucetScope = "wallet" | "maker";
+
+// One map per faucet, NOT one shared map. The two faucets mint DIFFERENT MockFXRP contracts — the
+// wallet faucet mints the demo escrow's token, the maker faucet the enclave-loop escrow's — so a
+// shared limiter meant claiming one burned your claim on the other, leaving you holding a balance
+// the escrow you were about to use could not see. That is exactly how it failed in testing.
+const lastFaucetClaim: Record<FaucetScope, Map<string, number>> = {
+  wallet: new Map(), // lowercased address -> claimedAt ms
+  maker: new Map(),
+};
 
 /// Returns true (and records the claim) if `address` (already checksum-validated by the caller)
-/// has not claimed within the last FAUCET_RATE_LIMIT_MS; false if still rate-limited.
-export function checkAndRecordFaucetClaim(address: string): boolean {
+/// has not claimed within the last FAUCET_RATE_LIMIT_MS for THAT faucet; false if rate-limited.
+export function checkAndRecordFaucetClaim(address: string, scope: FaucetScope = "wallet"): boolean {
   const key = address.toLowerCase();
   const now = Date.now();
-  const last = lastFaucetClaim.get(key);
+  const map = lastFaucetClaim[scope];
+  const last = map.get(key);
   if (last !== undefined && now - last < FAUCET_RATE_LIMIT_MS) {
     return false;
   }
-  lastFaucetClaim.set(key, now);
+  map.set(key, now);
   return true;
 }
 
