@@ -12,6 +12,7 @@ import {
   sendApprove,
   sendDeposit,
   sendLock,
+  sendSubmitRfq,
   WalletRejectionError,
 } from "@/lib/wallet-client";
 
@@ -189,6 +190,14 @@ export default function WalletMode({
   const [gasBusy, setGasBusy] = useState(false);
   const [gasError, setGasError] = useState<string | null>(null);
 
+  // Publishing to the open desk — the path where a real maker, not the desk, fills you.
+  const [publishStage, setPublishStage] = useState<
+    "idle" | "sealing" | "approving" | "depositing" | "submitting" | "confirming" | "waiting"
+  >("idle");
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [publishedRfqId, setPublishedRfqId] = useState<string | null>(null);
+  const [fill, setFill] = useState<{ maker: string; xrpDrops: string } | null>(null);
+
   // S2 — faucet
   const [faucetBusy, setFaucetBusy] = useState(false);
   const [faucetError, setFaucetError] = useState<string | null>(null);
@@ -365,6 +374,115 @@ export default function WalletMode({
       if (mountedRef.current) setGasBusy(false);
     }
   }, [address, addLog]);
+
+  /* ------------------------------------------------------------------------
+     Publish to the open desk.
+
+     The other path in this seat trades against the desk: /api/wallet/prepare
+     has the desk sign the match as maker. This one puts the order in the
+     shared queue instead, so whoever is sitting in a maker seat can quote it —
+     which is the only way two independent people end up on one trade.
+
+     submitRfq goes out from the judge's own wallet on purpose. The sender
+     contract stamps the taker from msg.sender, and that stamp is what makes a
+     taker's identity unforgeable; relaying it from a desk key would hand back
+     the property the whole on-chain ingress exists to provide.
+  ------------------------------------------------------------------------ */
+
+  const runPublishRfq = useCallback(async () => {
+    if (!address || !xrplAddress) return;
+    setPublishError(null);
+    try {
+      setPublishStage("sealing");
+      const prep = await postJSON<{
+        ciphertext: string;
+        senderAddress: string;
+        relayFeeWei: string;
+        escrow: string;
+        approve: { token: string; spender: string; amount: string };
+        deposit: { amount: string; armedUntil: string };
+        error?: string;
+        enabled?: boolean;
+      }>("/api/taker/rfq/prepare", { taker: address, xrplAddress });
+      if (prep.status === 503 || prep.data?.enabled === false) {
+        setEnabled(false);
+        setPublishStage("idle");
+        return;
+      }
+      if (!prep.ok || !prep.data) throw new Error(prep.data?.error ?? "could not seal the RFQ");
+      addLog("RFQ sealed to the enclave — its contents never touch this browser.", { tone: "muted" });
+
+      setPublishStage("approving");
+      await sendApprove(prep.data.approve);
+
+      setPublishStage("depositing");
+      const depositTx = await sendDeposit(prep.data.escrow, prep.data.deposit);
+      addLog("FXRP deposited and armed", {
+        href: COSTON2_TX(depositTx),
+        linkText: shortHash(depositTx),
+      });
+
+      setPublishStage("submitting");
+      const rfqTx = await sendSubmitRfq({
+        senderAddress: prep.data.senderAddress,
+        ciphertext: prep.data.ciphertext,
+        relayFeeWei: prep.data.relayFeeWei,
+      });
+      addLog("submitRfq() sent from your wallet — the taker is stamped from msg.sender", {
+        href: COSTON2_TX(rfqTx),
+        linkText: shortHash(rfqTx),
+        tone: "success",
+      });
+
+      setPublishStage("confirming");
+      const conf = await postJSON<{ rfqId: string; windowEndsAt: number; error?: string }>(
+        "/api/taker/rfq/confirm",
+        { txHash: rfqTx, taker: address }
+      );
+      if (!conf.ok || !conf.data?.rfqId) throw new Error(conf.data?.error ?? "the enclave did not ack the RFQ");
+
+      setPublishedRfqId(conf.data.rfqId);
+      setPublishStage("waiting");
+      addLog(
+        `Live on the desk — rfqId ${shortHash(conf.data.rfqId)}. Any maker can now quote it, and none of them can read it.`,
+        { tone: "success" }
+      );
+    } catch (err) {
+      const msg =
+        err instanceof WalletRejectionError
+          ? "you rejected the transaction in your wallet"
+          : err instanceof Error
+            ? err.message
+            : "publishing failed";
+      setPublishError(msg);
+      addLog(msg, { tone: "error" });
+      setPublishStage("idle");
+    }
+  }, [address, xrplAddress, addLog]);
+
+  // Watch the chain for a fill. The answer only counts if the escrow says it, so this reads
+  // matches(rfqId) rather than trusting any server-side record of what happened.
+  useEffect(() => {
+    if (!publishedRfqId || fill) return;
+    let cancelled = false;
+    const poll = async () => {
+      const res = await getJSON<{ filled?: boolean; maker?: string; xrpDrops?: string }>(
+        `/api/taker/rfq/status?rfqId=${publishedRfqId}`
+      );
+      if (cancelled || !res.ok || !res.data?.filled || !res.data.maker) return;
+      setFill({ maker: res.data.maker, xrpDrops: res.data.xrpDrops ?? "0" });
+      addLog(
+        `Filled by ${shortHash(res.data.maker)} — a maker you have never seen, who never saw your order.`,
+        { tone: "success" }
+      );
+    };
+    void poll();
+    const t = setInterval(() => void poll(), 5_000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [publishedRfqId, fill, addLog]);
 
   /* ------------------------------------------------------------------------
      S2 — demo FXRP faucet
@@ -871,6 +989,72 @@ export default function WalletMode({
           </div>
         )}
       </StepShell>
+      )}
+
+      {/* The open desk. Everything below this panel trades against the house; this one puts the
+          order where a stranger can fill it. Shown once an XRPL address exists, because that
+          address is what the maker's XRP has to land on. */}
+      {xrplAddress && !publishedRfqId && (
+        <div className="panel px-6 py-5">
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="mono-label text-[0.6rem] text-ice">Publish to the open desk</p>
+            <p className="mono-label text-[0.5rem] text-ink-3">optional</p>
+          </div>
+          <p className="text-[0.88rem] leading-[1.55] text-ink-2 mt-2 max-w-[62ch]">
+            Put your sealed order in the shared queue instead of trading against the house. A maker
+            in another window can quote it — without reading your side, size, or limit — and the
+            enclave awards it to the best price.
+          </p>
+          <button
+            type="button"
+            onClick={runPublishRfq}
+            disabled={publishStage !== "idle"}
+            className="mono-label text-[0.64rem] mt-4 px-5 py-2.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
+          >
+            {publishStage === "idle"
+              ? publishError
+                ? "Retry publish"
+                : "Publish my RFQ"
+              : publishStage === "sealing"
+                ? "Sealing to the enclave…"
+                : publishStage === "approving"
+                  ? "Confirm approve in wallet…"
+                  : publishStage === "depositing"
+                    ? "Confirm deposit in wallet…"
+                    : publishStage === "submitting"
+                      ? "Confirm submitRfq in wallet…"
+                      : "Waiting for the enclave…"}
+          </button>
+          {publishError && <p className="mono-label text-[0.6rem] text-iron-red mt-3">{publishError}</p>}
+        </div>
+      )}
+
+      {publishedRfqId && (
+        <div className="panel px-6 py-5">
+          <p className="mono-label text-[0.6rem] text-ice">
+            {fill ? "Filled by an independent maker" : "Live on the open desk"}
+          </p>
+          <p className="mono-data text-[0.85rem] text-ink mt-2">
+            <span className="text-ink-3">rfqId </span>
+            {shortHash(publishedRfqId)}
+          </p>
+          {fill ? (
+            <p className="mono-data text-[0.85rem] text-ink mt-1.5">
+              <span className="text-ink-3">maker </span>
+              {shortHash(fill.maker)}
+              <span className="mono-label text-[0.56rem] text-ink-3 block mt-2 leading-relaxed">
+                Someone you have never seen priced your order without reading it. They now owe the
+                XRP leg to your address, and the escrow will not release your FXRP until the Flare
+                Data Connector proves it arrived.
+              </span>
+            </p>
+          ) : (
+            <p className="mono-label text-[0.56rem] text-ink-3 mt-2 leading-relaxed">
+              Open a maker seat in another window and quote this id. Nobody quoting it can see your
+              side, size, or limit — and no maker is told whether another maker is on it.
+            </p>
+          )}
+        </div>
       )}
 
       {currentStep >= 2 && (

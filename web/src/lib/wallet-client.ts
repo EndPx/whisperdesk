@@ -195,6 +195,31 @@ export async function sendDeposit(
   });
 }
 
+/** Publishes a sealed RFQ from the taker's OWN wallet.
+ *
+ *  This one cannot be relayed on the judge's behalf, which is why it lives here rather than on the
+ *  server: WhisperDeskInstructionSender stamps the taker from msg.sender, so the transaction has to
+ *  originate from the wallet that owns the order. Sending it from a desk key would produce an RFQ
+ *  attributed to the desk — the exact forgery the on-chain ingress exists to prevent.
+ *
+ *  Minimal inline ABI: the sender contract's surface used here is a single method, and importing
+ *  the server's full ABI would drag its dependencies into the bundle for no gain. */
+const SUBMIT_RFQ_ABI = ["function submitRfq(bytes ciphertext) payable returns (bytes32)"];
+
+export async function sendSubmitRfq(rfq: {
+  senderAddress: string;
+  ciphertext: string;
+  relayFeeWei: string;
+}): Promise<string> {
+  return withRejectionSurfaced(async () => {
+    const signer = await getSigner();
+    const sender = new Contract(rfq.senderAddress, SUBMIT_RFQ_ABI, signer);
+    const tx = await sender.submitRfq(rfq.ciphertext, { value: rfq.relayFeeWei });
+    const receipt = await tx.wait();
+    return receipt.hash as string;
+  });
+}
+
 export async function sendLock(lock: {
   to: string;
   instructionData: string;
