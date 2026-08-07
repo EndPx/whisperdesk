@@ -1138,8 +1138,48 @@ export default function MakerMode({
   // started working. Pinned beside the flow they stay answerable at a glance, which is the whole
   // reason a trading screen has a rail at all.
   return (
-    <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-start">
-      <div className="min-w-0 space-y-6">
+    <div className="mt-4 grid gap-4 xl:grid-cols-[15rem_minmax(0,1fr)_19rem] lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-start">
+      {/* Left: the queue. A dealer desk opens on the flow of requests, not on your own paperwork —
+          so what other people have put on the market is the first thing on screen, and it stays
+          there while you work. Collapses away below xl, where three columns stop being readable. */}
+      <aside className="hidden xl:block panel overflow-hidden self-start">
+        <div className="px-4 py-3 border-b border-steel-line flex items-baseline justify-between gap-2">
+          <p className="mono-label text-[0.56rem] text-ice">Request queue</p>
+          <p className="mono-label text-[0.5rem] text-ink-3">{openRfqs.length}</p>
+        </div>
+        <div className="max-h-[26rem] overflow-y-auto divide-y divide-steel-line">
+          {openRfqs.length === 0 ? (
+            <p className="px-4 py-6 mono-label text-[0.52rem] text-ink-3 leading-relaxed">
+              Nothing open right now. Seal one below, or wait for a taker to publish.
+            </p>
+          ) : (
+            openRfqs.map((r) => {
+              const mine = rfqData?.rfqId === r.rfqId;
+              return (
+                <button
+                  key={r.rfqId}
+                  type="button"
+                  onClick={() => !rfqData && runJoinRfq(r.rfqId)}
+                  disabled={!!rfqData || currentStep < 1}
+                  className={`w-full text-left px-4 py-3 transition-colors duration-300 disabled:pointer-events-none ${
+                    mine ? "bg-ice/10 border-l-2 border-ice" : "hover:bg-vault-2/60"
+                  }`}
+                >
+                  <p className="mono-data text-[0.62rem] text-ink-2" title={r.rfqId}>
+                    {shortHash(r.rfqId)}
+                  </p>
+                  {/* Sealed by design: an id and a clock, never a side or a size. */}
+                  <p className="mono-label text-[0.5rem] text-ink-3 mt-1.5">
+                    {mine ? "yours · quoting" : "sealed · open to quote"}
+                  </p>
+                </button>
+              );
+            })
+          )}
+        </div>
+      </aside>
+
+      <div className="min-w-0 space-y-4">
       {/* The party-and-rails diagram lived here. It restated what the Holdings rail and the console
           log already say, cost roughly 200px above the fold, and animated while a maker was trying
           to read a price. The landing page explains the mechanism; this is where it runs. */}
@@ -1200,8 +1240,11 @@ export default function MakerMode({
                 to run but that no live demo had ever staged. Each row shows an id and a deadline
                 and nothing else: not the side, not the size, not the limit, and not how many rivals
                 are already on it. */}
+            {/* xl:hidden — above that width this same queue lives in the left rail, where a dealer
+                desk keeps it. Below it, three columns stop being readable, so it folds back inline
+                rather than disappearing. */}
             {!rfqData && openRfqs.length > 0 && (
-              <div className="border border-steel-line bg-vault-2/60 px-4 py-3.5 space-y-2.5">
+              <div className="xl:hidden border border-steel-line bg-vault-2/60 px-4 py-3.5 space-y-2.5">
                 <div className="flex items-baseline justify-between gap-3">
                   <p className="mono-label text-[0.56rem] text-ice">Open RFQs — quote against one</p>
                   <p className="mono-label text-[0.5rem] text-ink-3">{openRfqs.length} live</p>
