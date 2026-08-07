@@ -179,21 +179,9 @@ export default function DemoConsole() {
     };
   }, []);
 
-  // Wallet-aware default: the server can't know whether a browser wallet is present, so we render
-  // the stable "wallet" tab first (matches server + first client paint — no hydration mismatch),
-  // then flip to the one-click tab post-mount if detection comes back empty. Reuses the same
-  // detectProvider() signal WalletMode.tsx uses for its own no-wallet fallback. If the judge has
-  // already clicked a tab by the time detection resolves, their choice wins.
-  useEffect(() => {
-    let cancelled = false;
-    Promise.resolve().then(() => {
-      if (cancelled || userPickedModeRef.current) return;
-      if (!detectProvider()) setMode("one-click");
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // The wallet-aware default that used to flip a wallet-less visitor into the one-click tab is gone
+  // with that tab. Both remaining seats need a wallet, and DeskEntry already says so on the card
+  // itself rather than silently rerouting someone to a seat they did not choose.
 
   // Keep the in-flight pill glide replaying while a stage is still pending —
   // otherwise a single 1300ms glide would finish long before a real tx does.
@@ -708,7 +696,6 @@ npm run happy-path`}
       <div className="flex flex-wrap items-center gap-1.5">
         {(
           [
-            { role: "one-click", label: "Desk wallet" },
             { role: "wallet", label: "As the taker" },
             { role: "maker", label: "As the maker" },
           ] as const

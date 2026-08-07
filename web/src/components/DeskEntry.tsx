@@ -33,20 +33,11 @@ type Seat = {
   accent: "ice" | "amber";
 };
 
+// The "no setup" seat is gone deliberately. It ran both sides from the desk's own keys, so it
+// demonstrated the machinery but proved nothing about a counterparty — a judge watching it could
+// not tell whether anyone independent was ever involved. Both remaining seats put a real wallet on
+// one side of the trade, which is the only part worth watching.
 const SEATS: Seat[] = [
-  {
-    role: "one-click",
-    tag: "No setup",
-    name: "Watch the desk trade",
-    sees: "Sees the whole trade, both sides.",
-    visibleLabel: "You provide",
-    visibleValue: "Nothing — the desk's own testnet keys",
-    sealedLabel: "Time to settle",
-    sealedBlocks: 0,
-    sealedNote: "about 4 minutes, FDC round included",
-    cta: "Watch it settle",
-    accent: "ice",
-  },
   {
     role: "wallet",
     tag: "Your wallet",
