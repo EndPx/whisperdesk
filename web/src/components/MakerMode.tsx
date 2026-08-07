@@ -321,6 +321,8 @@ export default function MakerMode({
   const [s3Error, setS3Error] = useState<string | null>(null);
   const [rfqBusy, setRfqBusy] = useState(false);
   const [rfqData, setRfqData] = useState<OpenRfqResponse | null>(null);
+  // The shared queue of RFQs open for quoting — including ones other browsers opened.
+  const [openRfqs, setOpenRfqs] = useState<{ rfqId: string; windowEndsAt: number }[]>([]);
   const [rfqWindowMs, setRfqWindowMs] = useState<number | null>(null);
   const [bondTx, setBondTx] = useState<string | null>(null);
 
@@ -655,6 +657,60 @@ export default function MakerMode({
       setS3Stage("idle");
     }
   }, [address, addLog, runApprove]);
+
+  /* ------------------------------------------------------------------------
+     The shared queue — where a second maker joins a sealed RFQ someone else
+     opened. Quoting one of these instead of opening your own is what turns
+     "the matcher supports competing makers" from a unit test into a live run.
+  ------------------------------------------------------------------------ */
+
+  const refreshQueue = useCallback(async () => {
+    const res = await getJSON<{ rfqs?: { rfqId: string; windowEndsAt: number }[]; enabled?: boolean }>(
+      "/api/maker/open-rfqs"
+    );
+    if (!mountedRef.current) return;
+    if (res.ok && res.data?.rfqs) setOpenRfqs(res.data.rfqs);
+  }, []);
+
+  // Poll while this maker has not committed to an RFQ yet. Once they have, the queue is noise.
+  useEffect(() => {
+    if (!address || rfqData) return;
+    void refreshQueue();
+    const t = setInterval(() => void refreshQueue(), 5_000);
+    return () => clearInterval(t);
+  }, [address, rfqData, refreshQueue]);
+
+  const runJoinRfq = useCallback(
+    async (rfqId: string) => {
+      if (!address) return;
+      setS3Stage("opening");
+      setS3Error(null);
+      setRfqBusy(false);
+      try {
+        const res = await postJSON<OpenRfqResponse>("/api/maker/join-rfq", { rfqId });
+        if (res.status === 503 || res.data?.enabled === false) {
+          setEnabled(false);
+          setS3Stage("idle");
+          return;
+        }
+        if (!res.ok || !res.data) throw new Error(res.data?.error ?? "join-rfq() failed");
+
+        setRfqData(res.data);
+        setRfqWindowMs(Number(res.data.windowEndsAt) * 1000);
+        addLog(
+          `Joined RFQ ${shortHash(res.data.rfqId)} — opened by someone else. You are quoting against whoever else is on it, and you are not told whether anyone is.`,
+          { tone: "muted" }
+        );
+        await runApprove(res.data);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "join-rfq() failed";
+        setS3Error(msg);
+        addLog(msg, { tone: "error" });
+        setS3Stage("idle");
+      }
+    },
+    [address, addLog, runApprove]
+  );
 
   /* ------------------------------------------------------------------------
      S4 — quote it: prefill the live FTSOv2 mid, sign EIP-712 in MetaMask
@@ -1139,6 +1195,39 @@ export default function MakerMode({
                 </p>
               </div>
             )}
+            {/* The shared queue. Quoting one of these instead of opening your own is what puts two
+                independent makers on ONE sealed RFQ — the contest the matcher has always been able
+                to run but that no live demo had ever staged. Each row shows an id and a deadline
+                and nothing else: not the side, not the size, not the limit, and not how many rivals
+                are already on it. */}
+            {!rfqData && openRfqs.length > 0 && (
+              <div className="border border-steel-line bg-vault-2/60 px-4 py-3.5 space-y-2.5">
+                <div className="flex items-baseline justify-between gap-3">
+                  <p className="mono-label text-[0.56rem] text-ice">Open RFQs — quote against one</p>
+                  <p className="mono-label text-[0.5rem] text-ink-3">{openRfqs.length} live</p>
+                </div>
+                {openRfqs.map((r) => (
+                  <div key={r.rfqId} className="flex items-center justify-between gap-3">
+                    <span className="mono-data text-[0.72rem] text-ink-2" title={r.rfqId}>
+                      {shortHash(r.rfqId)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => runJoinRfq(r.rfqId)}
+                      disabled={currentStep < 1 || (s3Stage !== "idle" && !s3Error)}
+                      className="mono-label text-[0.56rem] px-2.5 py-1 border border-ice/40 text-ice hover:bg-ice/10 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
+                    >
+                      Quote this one
+                    </button>
+                  </div>
+                ))}
+                <p className="mono-label text-[0.5rem] text-ink-3 leading-relaxed">
+                  Open a second window as a maker, join the same id, and the enclave awards the trade
+                  to the better price — with neither wallet told the other exists.
+                </p>
+              </div>
+            )}
+
             <button
               type="button"
               onClick={

@@ -158,6 +158,35 @@ export function getRfqRecord(rfqId: string): RfqRecord | null {
   return rec;
 }
 
+/** Every RFQ still inside its quoting window, newest first — the shared queue two makers meet in.
+ *
+ *  This store is a module-level Map on a single node, so an RFQ opened in one browser is already
+ *  visible to every other session. That is what lets two independent makers quote the SAME sealed
+ *  RFQ and compete on price — the one claim the desk could never demonstrate live before. The
+ *  matcher has always supported it; every run so far simply had a single maker in it.
+ *
+ *  Note what is NOT returned: no side, no size, no limit, no taker, and no count of who else is
+ *  quoting. A maker learns that an RFQ exists and when its window closes, and nothing that would
+ *  let them shade a price against the order or against a rival.
+ *
+ *  windowEndsAt is epoch SECONDS (it comes from the enclave); createdAt is epoch milliseconds
+ *  (Date.now()). Mixing those two up would silently expire every RFQ instantly. */
+export function listOpenRfqs(): { rfqId: string; windowEndsAt: number }[] {
+  const now = Date.now();
+  const open: { rfqId: string; windowEndsAt: number; createdAt: number }[] = [];
+  for (const [rfqId, rec] of rfqStore) {
+    if (now - rec.createdAt > RECORD_TTL_MS) {
+      rfqStore.delete(rfqId);
+      continue;
+    }
+    if (rec.windowEndsAt * 1000 <= now) continue; // window already closed — nothing to quote into
+    open.push({ rfqId, windowEndsAt: rec.windowEndsAt, createdAt: rec.createdAt });
+  }
+  return open
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .map(({ rfqId, windowEndsAt }) => ({ rfqId, windowEndsAt }));
+}
+
 interface MatchRecord {
   xrplDestination: string;
   xrpDrops: string;
@@ -288,6 +317,40 @@ export async function buildOpenRfq(env: MakerEnv): Promise<OpenRfqResult> {
     bondLedger: await bondLedger.getAddress(),
     bondAmount: bondAmount.toString(),
     approve: { token: await fxrp.getAddress(), spender: await bondLedger.getAddress(), amount: bondAmount.toString() },
+    depositBond: { amount: bondAmount.toString() },
+  };
+}
+
+/** The same payload as buildOpenRfq, but for an RFQ someone ELSE already opened.
+ *
+ *  This is what makes a second maker possible. buildOpenRfq seals a fresh RFQ and funds a desk taker
+ *  deposit behind it; calling it again would produce a second, unrelated order rather than a rival
+ *  quote. Joining reuses the existing rfqId, so two wallets end up quoting one sealed RFQ and the
+ *  enclave decides between them on price.
+ *
+ *  Everything here except rfqId/windowEndsAt is an escrow constant — note especially that
+ *  bondAmount derives from MIN_BLOCK_FXRP, not from the RFQ's actual size. That is what keeps this
+ *  route from leaking the very field the desk promises to seal: were the bond 1% of the real
+ *  notional, handing it to a maker would hand them the order size with it. */
+export async function buildJoinRfq(env: MakerEnv, rfqId: string): Promise<OpenRfqResult> {
+  const rec = getRfqRecord(rfqId);
+  if (!rec) throw new Error("that RFQ is no longer open — pick another from the queue");
+
+  const clients: DemoClients = await setupClients(env, { requireOwnerIsTeeSigner: false });
+  const { escrow, fxrp, bondLedger } = clients;
+
+  const minBlock: bigint = await escrow.MIN_BLOCK_FXRP();
+  const bondBips: bigint = await escrow.BOND_BIPS();
+  const bondAmount = (minBlock * bondBips) / BigInt(10000);
+
+  const bondLedgerAddress = await bondLedger.getAddress();
+  return {
+    rfqId,
+    windowEndsAt: String(rec.windowEndsAt),
+    escrow: await escrow.getAddress(),
+    bondLedger: bondLedgerAddress,
+    bondAmount: bondAmount.toString(),
+    approve: { token: await fxrp.getAddress(), spender: bondLedgerAddress, amount: bondAmount.toString() },
     depositBond: { amount: bondAmount.toString() },
   };
 }

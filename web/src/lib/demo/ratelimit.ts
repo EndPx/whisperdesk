@@ -20,6 +20,7 @@ export type RateLimitKind =
   | "demo-pay"
   | "maker-faucet"
   | "maker-open-rfq"
+  | "maker-join-rfq"
   | "maker-quote"
   | "maker-match"
   | "maker-settle"
@@ -41,6 +42,10 @@ const LIMITS: Record<RateLimitKind, Limits> = {
   "demo-lock": { perIp: 3, global: 20 },
   "demo-attest": { perIp: 5, global: 30 },
   "demo-pay": { perIp: 5, global: 30 },
+  // join-rfq spends no funds at all — it only reads escrow constants for an RFQ that already
+  // exists — so it is the one maker route that can afford a generous budget. It still needs one,
+  // because the queue polls and a second maker will hit it repeatedly while deciding.
+  "maker-join-rfq": { perIp: 30, global: 200 },
   // Maker mode (api/maker/*) — same reasoning, own budgets so a maker-mode abuse loop can't starve
   // (or be starved by) the one-click/wallet-mode budgets above. open-rfq spends the desk's own
   // taker-funded deposit + a relay fee; match spends a relay fee + the FTSOv2 fee on lock(); settle
