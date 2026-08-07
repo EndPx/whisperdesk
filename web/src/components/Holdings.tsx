@@ -222,25 +222,30 @@ export default function Holdings({
 
           {needsGas && (
             <>
+              {/* Flare's own faucet leads now. The desk drip spends the same key that pays for every
+                  settlement the desk runs, so each visitor topped up here is reserve it cannot use
+                  to finish a trade — and Coston2 gas is free from the source anyway. The drip stays
+                  as a second line for the case that genuinely needs it: running dry mid-run, where
+                  leaving the page is how a judge abandons the demo. */}
+              <a
+                href="https://faucet.flare.network/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mono-label text-[0.62rem] w-full px-3 py-2 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 block text-center"
+              >
+                Get C2FLR — faucet.flare.network
+              </a>
               <button
                 type="button"
                 onClick={onGas}
                 disabled={gasBusy}
-                className="mono-label text-[0.62rem] w-full px-3 py-2 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
+                className="mono-label text-[0.54rem] text-ink-3 hover:text-ice hover:underline block disabled:opacity-30 disabled:pointer-events-none"
               >
                 {/* No amount in the label: the drip size lives in wallet-mode.ts and this is a client
                     component, so a number here would be a copy that silently goes stale. */}
-                {gasBusy ? "Sending…" : "Send me gas"}
+                {gasBusy ? "Sending…" : "or let the desk send you a little"}
               </button>
               {gasError && <p className="mono-label text-[0.58rem] text-iron-red">{gasError}</p>}
-              <a
-                href="https://faucet.flare.network"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mono-label text-[0.54rem] text-ink-3 hover:text-ice hover:underline block"
-              >
-                or use faucet.flare.network
-              </a>
             </>
           )}
         </div>
