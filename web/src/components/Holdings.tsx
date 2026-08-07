@@ -42,8 +42,12 @@ const TOKEN_COLOR: Record<HoldingToken, string> = {
   C2FLR: "#e8b657",
 };
 
+// "FAssets · Coston2" was wrong and flattering. What the faucet mints and every seat here settles
+// is MockFXRP — a mintable test token whose symbol also happens to read FXRP, which is precisely
+// why the mislabel survived. The genuine FAssets asset is FTestXRP (0x0b6A3645…3dc7) and lives on
+// a separate escrow used for the two real-asset settlements; it is never what this panel shows.
 const TOKEN_SUB: Record<HoldingToken, string> = {
-  FXRP: "FAssets · Coston2",
+  FXRP: "MockFXRP · demo token",
   XRP: "XRPL Testnet",
   C2FLR: "Coston2 · gas",
 };
