@@ -928,7 +928,7 @@ export default function WalletMode({
       {/* Only what can be acted on now, plus what already happened. Future stages stay out of the
           way entirely: a ladder of greyed-out boxes describes the plumbing, not the trade. */}
       {currentStep >= 1 && (
-      <StepShell n={1} title="XRPL receive address" done={!!xrplAddress} active={currentStep === 1}>
+      <StepShell n={1} title="Your receive address" done={!!xrplAddress} active={currentStep === 1}>
         {!xrplAddress ? (
           <div className="space-y-4">
             {/* Generate goes FIRST. Most judges have no XRPL testnet address, so this is the path
@@ -1059,7 +1059,7 @@ export default function WalletMode({
       )}
 
       {currentStep >= 2 && (
-      <StepShell n={2} title="Prepare + wallet confirmations" done={s4Stage === "done"} active={currentStep === 2}>
+      <StepShell n={2} title="Open the trade" done={s4Stage === "done"} active={currentStep === 2}>
         {s4Stage !== "done" ? (
           <div className="space-y-3">
             <button
@@ -1103,7 +1103,7 @@ export default function WalletMode({
       )}
 
       {currentStep >= 3 && (
-      <StepShell n={3} title="Watch settlement" done={s5Stage === "done"} active={currentStep === 3}>
+      <StepShell n={3} title="Settlement" done={s5Stage === "done"} active={currentStep === 3}>
         {s5Stage !== "done" ? (
           <div className="space-y-3">
             <button
@@ -1255,19 +1255,22 @@ function StepShell({
   // you are doing, above the receipts of what you already did.
   if (!active) return null;
 
+  // No number on the badge any more. With only the current stage rendered, a numeral answered a
+  // question nobody was asking — "which of seven forms am I on" — and made a desk read like an
+  // onboarding wizard. A live dot or a tick says the same thing a terminal would: this is what is
+  // happening, or this is done. The ordinal stays in the DOM as data-stage for tests, which is the
+  // only reader that ever needed it.
   return (
-    <div className="panel px-6 py-6 sm:px-8 sm:py-7">
-      <div className="flex items-center gap-3 mb-4">
-        <span
-          className={`mono-label text-[0.6rem] w-6 h-6 rounded-full border grid place-items-center shrink-0 ${
-            done ? "border-ice/60 text-ice" : "border-steel-line-2 text-ink-3"
-          }`}
-        >
-          {done ? <IconCheck className="h-3 w-3" /> : n}
-        </span>
-        <p className="mono-label text-[0.68rem] text-ink-2">{title}</p>
+    <div className="panel overflow-hidden" data-stage={n}>
+      <div className="px-6 py-3.5 border-b border-steel-line flex items-center gap-2.5">
+        {done ? (
+          <IconCheck className="h-3 w-3 text-ice shrink-0" />
+        ) : (
+          <span className="h-1.5 w-1.5 rounded-full bg-ice animate-pulse shrink-0" aria-hidden="true" />
+        )}
+        <p className="mono-label text-[0.6rem] text-ice">{title}</p>
       </div>
-      {children}
+      <div className="px-6 py-5">{children}</div>
     </div>
   );
 }

@@ -1216,7 +1216,7 @@ export default function MakerMode({
 
       {/* Only what can be acted on now, plus what already happened. Future stages stay out of the
           way entirely: a ladder of greyed-out boxes describes the plumbing, not the trade. */}
-      <StepShell n={1} title="Open an RFQ to quote against" done={s3Stage === "done"} active={currentStep === 1}>
+      <StepShell n={1} title="Take a request" done={s3Stage === "done"} active={currentStep === 1}>
         {s3Stage !== "done" ? (
           <div className="space-y-4">
             {rfqData && (
@@ -1330,7 +1330,7 @@ export default function MakerMode({
       </StepShell>
 
       {/* S3 */}
-      <StepShell n={2} title="Quote it" done={quoteAccepted} active={currentStep === 2}>
+      <StepShell n={2} title="Your quote" done={quoteAccepted} active={currentStep === 2}>
         {noMatchReasons && (
           <div className="mb-4 border border-steel-line-2 bg-vault-2 px-4 py-3">
             <p className="mono-label text-[0.6rem] text-ink-3 mb-1.5">No match — not an error, re-quote below</p>
@@ -1556,7 +1556,7 @@ export default function MakerMode({
       </StepShell>
 
       {/* S6 */}
-      <StepShell n={5} title="Watch settlement" done={s7Stage === "done"} active={currentStep === 5}>
+      <StepShell n={5} title="Settlement" done={s7Stage === "done"} active={currentStep === 5}>
         {s7Stage !== "done" ? (
           <div className="space-y-3">
             <button
@@ -1714,19 +1714,20 @@ function StepShell({
   // you are doing, above the receipts of what you already did.
   if (!active) return null;
 
+  // No number on the badge any more — see WalletMode's StepShell for why. A live dot or a tick says
+  // what a terminal would: this is happening, or this is done. The ordinal survives as data-stage
+  // for tests, the only reader that ever needed it.
   return (
-    <div className="panel px-6 py-6 sm:px-8 sm:py-7">
-      <div className="flex items-center gap-3 mb-4">
-        <span
-          className={`mono-label text-[0.6rem] w-6 h-6 rounded-full border grid place-items-center shrink-0 ${
-            done ? "border-ice/60 text-ice" : "border-steel-line-2 text-ink-3"
-          }`}
-        >
-          {done ? <IconCheck className="h-3 w-3" /> : n}
-        </span>
-        <p className="mono-label text-[0.68rem] text-ink-2">{title}</p>
+    <div className="panel overflow-hidden" data-stage={n}>
+      <div className="px-6 py-3.5 border-b border-steel-line flex items-center gap-2.5">
+        {done ? (
+          <IconCheck className="h-3 w-3 text-ice shrink-0" />
+        ) : (
+          <span className="h-1.5 w-1.5 rounded-full bg-ice animate-pulse shrink-0" aria-hidden="true" />
+        )}
+        <p className="mono-label text-[0.6rem] text-ice">{title}</p>
       </div>
-      {children}
+      <div className="px-6 py-5">{children}</div>
     </div>
   );
 }
