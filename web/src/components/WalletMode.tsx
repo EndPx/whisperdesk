@@ -413,18 +413,9 @@ export default function WalletMode({
       if (!prep.ok || !prep.data) throw new Error(prep.data?.error ?? "could not seal the RFQ");
       addLog("RFQ sealed to the enclave — its contents never touch this browser.", { tone: "muted" });
 
-      // The open desk settles on a DIFFERENT escrow from this seat's default path, and that escrow
-      // has its own MockFXRP. Holdings mints the other one, so a judge who minted there arrived
-      // here holding a balance this escrow cannot see — "MockFXRP: insufficient balance", with the
-      // balance visibly sitting in the rail beside the error. Top up the right token first.
-      // A 429 means they already hold some from an earlier run: success, not failure.
-      const topUp = await postJSON<{ minted?: string; error?: string }>("/api/maker/faucet", {
-        address,
-      });
-      if (topUp.ok && topUp.data?.minted) {
-        addLog(`Topped up ${topUp.data.minted} FXRP for the open-desk escrow`, { tone: "muted" });
-      }
-
+      // The top-up call that used to sit here is gone with the mock. Both escrows now hold genuine
+      // FAssets FXRP, which nothing we run can mint — it exists only against XRP locked in FAssets.
+      // A judge short of it goes to Flare's faucet, linked from Holdings.
       setPublishStage("approving");
       await sendApprove(prep.data.approve);
 

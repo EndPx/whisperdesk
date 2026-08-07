@@ -42,12 +42,12 @@ const TOKEN_COLOR: Record<HoldingToken, string> = {
   C2FLR: "#e8b657",
 };
 
-// "FAssets · Coston2" was wrong and flattering. What the faucet mints and every seat here settles
-// is MockFXRP — a mintable test token whose symbol also happens to read FXRP, which is precisely
-// why the mislabel survived. The genuine FAssets asset is FTestXRP (0x0b6A3645…3dc7) and lives on
-// a separate escrow used for the two real-asset settlements; it is never what this panel shows.
+// This label was briefly a lie and is now simply true: every seat settles the genuine FAssets asset
+// (FTestXRP, 0x0b6A3645…3dc7). The mock is gone — both escrows were redeployed against the real
+// token once Flare's faucet turned out to hand it out, which was the only thing the mock ever
+// existed to work around.
 const TOKEN_SUB: Record<HoldingToken, string> = {
-  FXRP: "MockFXRP · demo token",
+  FXRP: "FAssets · Coston2",
   XRP: "XRPL Testnet",
   C2FLR: "Coston2 · gas",
 };
@@ -212,15 +212,22 @@ export default function Holdings({
 
           {!faucetDone && (
             <>
-              <button
-                type="button"
-                onClick={onFaucet}
-                disabled={faucetBusy}
-                className="mono-label text-[0.62rem] w-full px-3 py-2 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
+              {/* No mint button any more, because there is nothing left to mint. The desk settles
+                  genuine FAssets FXRP now, and genuine FXRP exists only against XRP locked in the
+                  FAssets system — no contract we control can conjure it. Flare's own faucet hands
+                  out 10 per address per day, which is what made dropping the mock possible at all. */}
+              <a
+                href="https://faucet.flare.network/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mono-label text-[0.62rem] w-full px-3 py-2 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 block text-center"
               >
-                {faucetBusy ? "Minting…" : "Mint 2 demo FXRP"}
-              </button>
-              {faucetError && <p className="mono-label text-[0.58rem] text-iron-red">{faucetError}</p>}
+                Get FXRP — faucet.flare.network
+              </a>
+              <p className="mono-label text-[0.5rem] text-ink-3 leading-relaxed">
+                Real FAssets FXRP, 10 per address per day. Nobody can mint it on demand — it exists
+                only against XRP locked in FAssets, which is the whole point of the asset.
+              </p>
             </>
           )}
 
