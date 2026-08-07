@@ -1626,7 +1626,6 @@ export default function MakerMode({
           className="max-h-[360px] overflow-y-auto space-y-2 border-t border-steel-line pt-4"
         >
           {log.length === 0 ? (
-            {/* Not "waiting for step 1" — see WalletMode's console for why. */}
             <p className="mono-data text-[0.8rem] text-ink-3">Idle — nothing sent yet.</p>
           ) : (
             log.map((line) => (
