@@ -190,9 +190,9 @@ export default function Holdings({
 
       {xrpUsd !== null && (
         <div className="px-5 pb-3 -mt-1">
-          <p className="mono-label text-[0.5rem] text-ink-3 leading-relaxed">
-            Valued at the live FTSOv2 XRP/USD mid — the same feed the escrow re-checks the ±1% band
-            against. C2FLR is testnet gas and carries no price.
+          {/* Trimmed to one line: three stacked rail panels have to clear the fold together. */}
+          <p className="mono-label text-[0.5rem] text-ink-3 leading-snug">
+            Valued at the live FTSOv2 mid. C2FLR is gas — no price.
           </p>
         </div>
       )}

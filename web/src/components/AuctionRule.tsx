@@ -48,12 +48,12 @@ export default function AuctionRule() {
         </div>
       </div>
 
-      <div className="px-5 py-3.5 border-t border-steel-line bg-vault-2/60">
-        <p className="mono-label text-[0.52rem] text-ink-3 leading-relaxed">
-          Most RFQ venues hand the taker a list of quotes to choose from — which discloses every
-          losing maker to someone. Here a quote that clears the filters and simply loses on price is{" "}
-          <span className="text-ink">recorded nowhere at all</span>. Losing costs a maker nothing,
-          not even the fact that they showed up.
+      <div className="px-5 py-3 border-t border-steel-line bg-vault-2/60">
+        {/* One line, not five. The rail has to clear the fold alongside two other panels, and the
+            long form of this argument lives in the docs where there is room for it. */}
+        <p className="mono-label text-[0.5rem] text-ink-3 leading-snug">
+          A losing quote is <span className="text-ink">recorded nowhere</span> — not even that it
+          existed. Venues that let the taker pick must disclose every loser.
         </p>
       </div>
     </div>

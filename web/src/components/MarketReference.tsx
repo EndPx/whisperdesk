@@ -84,9 +84,10 @@ export default function MarketReference() {
           <p className="mono-data text-[0.72rem] text-ink mt-1.5 tabular-nums">
             {lo.toFixed(4)} – {hi.toFixed(4)}
           </p>
-          <p className="mono-label text-[0.5rem] text-ink-3 mt-2 leading-relaxed">
-            Re-read by the escrow inside <span className="text-ink">lock()</span>, so this bound
-            holds even if the enclave lies.
+          {/* Shortened so the rail's three panels clear the fold together. */}
+          <p className="mono-label text-[0.5rem] text-ink-3 mt-1.5 leading-snug">
+            Re-read by the escrow in <span className="text-ink">lock()</span> — holds even if the
+            enclave lies.
           </p>
         </div>
       )}
