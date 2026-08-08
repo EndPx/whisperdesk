@@ -151,24 +151,27 @@ order's side, size or limit.
 
 | Stage | Receipt |
 |---|---|
-| Taker, created during the run | [`0x994DafB2…AD87`](https://coston2-explorer.flare.network/address/0x994DafB28E0Bc37153100b541eB3A9d8A75EAD87) |
+| Taker, created during the run | [`0x005c469d…dB9f`](https://coston2-explorer.flare.network/address/0x005c469dF109e34049799BA07bCD89Ac014CdB9f) |
 | Maker, a different key | [`0x35AC3BE4…CE3C`](https://coston2-explorer.flare.network/address/0x35AC3BE4d8D3841f394564983Ed7b3fC3666CE3C) |
-| Taker's own `deposit()` | https://coston2-explorer.flare.network/tx/0x65d9527d7775225ff94469e3b2dffd892a1bbda98eccd36c3cbf2b2471413cd8 |
-| Sealed RFQ published, `rfqId` = `matchId` | `0xe5e89cfb…9316` |
-| Enclave matched the blind quote at 1.025878 USD/XRP | `MATCHED` |
-| XRPL payment — maker → the taker's own account | https://testnet.xrpl.org/transactions/AA65E989AB21609F284A9D0C1608ED5D517E5E3A54B8ADD953D17E038634F75E |
-| `release()` — maker received 1.0 FXRP | https://coston2-explorer.flare.network/tx/0x46353742101183d8852ba788a1d3cfb012d7eea9110ece16ec0b7da45f5190ac |
+| Taker's own `deposit()` | https://coston2-explorer.flare.network/tx/0x8d0e59a3179a53df476b9d9aeaf1e7dff25f36a87863d75cc42cab4a4d8d47f7 |
+| Sealed RFQ published, `rfqId` = `matchId` | `0x9fb96d23…0b99` |
+| Enclave matched the blind quote at 1.035466 USD/XRP | `MATCHED` |
+| XRPL payment — maker → the taker's own account | https://testnet.xrpl.org/transactions/065F32416C4949518407FD6E5FA853CE4A820DD60828C48D5C0C71A873FE0D01 |
+| `release()` — maker received 1.0 FXRP | https://coston2-explorer.flare.network/tx/0xe959c8ebb84dfc79bd8538a119b71798c17251f5bfa8397ab0889d2e46f7e21c |
 
-Verified afterwards straight off the chain: `matches().state == 2` (Released), `taker` ==
-`0x994DafB2…`, `maker` == `0x35AC3BE4…`, `takerXrplAddressHash` == `keccak256` of the taker's own
-XRPL address, maker FXRP 2.8 → 3.8, taker XRP 100 → 101.
+The script checks the chain as it goes, and those checks passed: `matches().taker` ==
+`0x005c469d…`, `matches().maker` == `0x35AC3BE4…`, and the escrow's XRP destination == the taker's
+own XRPL account. Balances after: maker FXRP 3.8 → 4.8, taker XRP 101.000249 on an account that was
+empty an hour earlier.
 
 What the desk did, in full: sealed the order, relayed two permissionless calls, paid their gas. It
 held neither leg. The FXRP came out of the taker's own escrow deposit, the bond was the maker's own,
 and the XRP went from the maker's XRPL account to the taker's.
 
 Reproduce: `scripts/e2e/two-party-desk.mjs` — it generates a fresh taker every run, so no two runs
-share a counterparty.
+share a counterparty. This settled twice the same evening with two unrelated takers; the first was
+`0x994DafB2…AD87`, `release()`
+[`0x46353742…90ac`](https://coston2-explorer.flare.network/tx/0x46353742101183d8852ba788a1d3cfb012d7eea9110ece16ec0b7da45f5190ac).
 
 ---
 
