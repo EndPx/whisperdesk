@@ -96,15 +96,21 @@ async function main() {
   log(`    ${takerXrpl.address}`);
 
   // ---- 2. The taker arms its own escrow balance ----------------------------------------------
-  step(4, "Taker approves and deposits — its OWN transactions, from its OWN key");
-  const prep = await post("/api/taker/rfq/prepare", {});
-  if (prep.escrow.toLowerCase() !== ESCROW.toLowerCase()) {
-    throw new Error(`prepare returned escrow ${prep.escrow}, expected ${ESCROW}`);
+  step(4, "Reading the bounds, then writing the order — the taker's numbers, not the desk's");
+  const terms = await get("/api/taker/rfq/prepare");
+  if (terms.escrow.toLowerCase() !== ESCROW.toLowerCase()) {
+    throw new Error(`terms returned escrow ${terms.escrow}, expected ${ESCROW}`);
   }
-  await (await fxrp.connect(taker).approve(prep.approve.spender, prep.approve.amount)).wait();
-  const depositTx = await (
-    await escrow.connect(taker).deposit(prep.deposit.amount, prep.deposit.armedUntil)
-  ).wait();
+  // Size at the block minimum, limit 0.5% under the live mid: a real order chosen here rather than
+  // composed server-side, and comfortably inside the band so a quote struck at mid clears it.
+  const sizeRaw = BigInt(terms.minBlockRaw);
+  const limitRaw = (BigInt(terms.midUsdE18) * BigInt(995)) / BigInt(1000);
+  log(`    size ${ethers.formatUnits(sizeRaw, 6)} FXRP, limit ${ethers.formatUnits(limitRaw, 18)} USD`);
+  log(`    (fillable up to ${ethers.formatUnits(terms.maxLimitUsdE18, 18)} — above that lock() refuses)`);
+
+  await (await fxrp.connect(taker).approve(terms.escrow, sizeRaw)).wait();
+  const armedUntil = Math.floor(Date.now() / 1000) + terms.armedSeconds;
+  const depositTx = await (await escrow.connect(taker).deposit(sizeRaw, armedUntil)).wait();
   log(`    deposit ${depositTx.hash}`);
 
   // ---- 3. Publish, and let a stranger find it -------------------------------------------------
@@ -112,6 +118,8 @@ async function main() {
   const pub = await post("/api/taker/rfq/publish", {
     taker: taker.address,
     xrplAddress: takerXrpl.address,
+    fxrpAmountRaw: sizeRaw.toString(),
+    limitPriceUsdE18: limitRaw.toString(),
   });
   log(`    rfqId ${pub.rfqId}   window closes at ${new Date(pub.windowEndsAt * 1000).toISOString()}`);
 
@@ -133,7 +141,9 @@ async function main() {
     rfqId: pub.rfqId,
     maker: maker.address,
     priceUsdE18: priceUsdE18.toString(),
-    maxFxrpRaw: minBlock.toString(),
+    // Must cover the RFQ's full size or the matcher drops this quote as UNDERSIZED. Tied to the
+    // taker's actual order, not to the block minimum, so it stays correct if the size changes.
+    maxFxrpRaw: sizeRaw.toString(),
     nonce: String(Date.now()),
   };
   const sig = await maker.signTypedData(

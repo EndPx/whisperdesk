@@ -12,6 +12,10 @@ export const DVP_ESCROW_ABI = [
   "function BOND_LEDGER() view returns (address)",
   "function MIN_BLOCK_FXRP() view returns (uint256)",
   "function BOND_BIPS() view returns (uint16)",
+  // Read so a taker can be shown the highest limit that could ever fill. lock() re-checks this band
+  // against the live FTSOv2 mid onchain, so the ceiling has to come from the contract that enforces
+  // it rather than a constant in the web app that could drift away from the deployment.
+  "function BAND_BIPS() view returns (uint16)",
   "function SETTLEMENT_WINDOW() view returns (uint32)",
   "function PAYMENT_WINDOW() view returns (uint32)",
   "function REFUND_GRACE() view returns (uint32)",

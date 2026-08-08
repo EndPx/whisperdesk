@@ -1,6 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+// Only the two unit converters. The order the taker types is human ("2.5" FXRP, "1.03" USD) and
+// everything downstream — escrow, enclave, EIP-712 — is raw integers, so the conversion has to be
+// exact: parseFloat on an 18-decimal price loses digits in the field the trade is priced on.
+import { formatUnits, parseUnits } from "ethers";
 import { BalanceRow, IconCheck, PartyCard, Rail, type PillSpec } from "@/components/flow/parts";
 import Holdings from "@/components/Holdings";
 import MarketReference from "@/components/MarketReference";
@@ -191,11 +195,28 @@ export default function WalletMode({
   const [gasError, setGasError] = useState<string | null>(null);
 
   // Publishing to the open desk — the path where a real maker, not the desk, fills you.
+  // No "sealing" stage any more: the order's bounds are fetched up front, so publishing starts at
+  // the taker's first signature rather than a server round trip they would only ever wait on.
   const [publishStage, setPublishStage] = useState<
-    "idle" | "sealing" | "approving" | "depositing" | "submitting" | "waiting"
+    "idle" | "approving" | "depositing" | "submitting" | "waiting"
   >("idle");
   const [publishError, setPublishError] = useState<string | null>(null);
   const [publishedRfqId, setPublishedRfqId] = useState<string | null>(null);
+
+  // The order is the taker's to write. The desk used to fill these in server-side and hand back a
+  // sealed RFQ whose contents the visitor had never seen — which protected the order from the maker
+  // but not from the venue that authored it. `terms` carries the two bounds that are actually
+  // enforced (MIN_BLOCK_FXRP, and the FTSOv2 band lock() re-checks), read from chain, not asserted.
+  const [terms, setTerms] = useState<{
+    escrow: string;
+    token: string;
+    minBlockRaw: string;
+    midUsdE18: string;
+    maxLimitUsdE18: string;
+    armedSeconds: number;
+  } | null>(null);
+  const [orderSize, setOrderSize] = useState("");
+  const [orderLimit, setOrderLimit] = useState("");
   const [fill, setFill] = useState<{ maker: string; xrpDrops: string } | null>(null);
 
   // S2 — faucet
@@ -391,44 +412,68 @@ export default function WalletMode({
   ------------------------------------------------------------------------ */
 
   const runPublishRfq = useCallback(async () => {
-    if (!address || !xrplAddress) return;
+    if (!address || !xrplAddress || !terms) return;
     setPublishError(null);
-    try {
-      setPublishStage("sealing");
-      const prep = await postJSON<{
-        escrow: string;
-        approve: { token: string; spender: string; amount: string };
-        deposit: { amount: string; armedUntil: string };
-        error?: string;
-        enabled?: boolean;
-      }>("/api/taker/rfq/prepare", {});
-      if (prep.status === 503 || prep.data?.enabled === false) {
-        setEnabled(false);
-        setPublishStage("idle");
-        return;
-      }
-      if (!prep.ok || !prep.data) throw new Error(prep.data?.error ?? "could not reach the desk");
 
+    // Convert before spending a single wallet popup on it. A size below the block minimum or a limit
+    // above the band is refused by the enclave and by lock() respectively, so catching it here saves
+    // the taker two signatures and a gas fee to learn something we already knew.
+    let sizeRaw: bigint;
+    let limitRaw: bigint;
+    try {
+      sizeRaw = parseUnits(orderSize.trim() || "0", 6);
+      limitRaw = parseUnits(orderLimit.trim() || "0", 18);
+    } catch {
+      setPublishError("size and limit must be plain numbers");
+      return;
+    }
+    if (sizeRaw < BigInt(terms.minBlockRaw)) {
+      setPublishError(`minimum block is ${formatUnits(terms.minBlockRaw, 6)} FXRP`);
+      return;
+    }
+    if (limitRaw <= BigInt(0)) {
+      setPublishError("set a limit price");
+      return;
+    }
+    if (limitRaw > BigInt(terms.maxLimitUsdE18)) {
+      setPublishError(
+        `a limit above ${Number(formatUnits(terms.maxLimitUsdE18, 18)).toFixed(6)} can never fill — the escrow re-reads the FTSOv2 mid and rejects anything outside the band`
+      );
+      return;
+    }
+
+    try {
       // The top-up call that used to sit here is gone with the mock. Both escrows now hold genuine
       // FAssets FXRP, which nothing we run can mint — it exists only against XRP locked in FAssets.
       // A judge short of it goes to Flare's faucet, linked from Holdings.
       setPublishStage("approving");
-      await sendApprove(prep.data.approve);
+      await sendApprove({ token: terms.token, spender: terms.escrow, amount: sizeRaw.toString() });
 
       setPublishStage("depositing");
-      const depositTx = await sendDeposit(prep.data.escrow, prep.data.deposit);
+      const armedUntil = String(Math.floor(Date.now() / 1000) + terms.armedSeconds);
+      const depositTx = await sendDeposit(terms.escrow, { amount: sizeRaw.toString(), armedUntil });
       addLog("FXRP deposited and armed — your fill can only come out of this balance", {
         href: COSTON2_TX(depositTx),
         linkText: shortHash(depositTx),
       });
 
       setPublishStage("submitting");
-      const conf = await postJSON<{ rfqId: string; windowEndsAt: number; error?: string }>(
+      const conf = await postJSON<{ rfqId: string; windowEndsAt: number; error?: string; enabled?: boolean }>(
         "/api/taker/rfq/publish",
-        { taker: address, xrplAddress }
+        {
+          taker: address,
+          xrplAddress,
+          fxrpAmountRaw: sizeRaw.toString(),
+          limitPriceUsdE18: limitRaw.toString(),
+        }
       );
+      if (conf.status === 503 || conf.data?.enabled === false) {
+        setEnabled(false);
+        setPublishStage("idle");
+        return;
+      }
       if (!conf.ok || !conf.data?.rfqId) throw new Error(conf.data?.error ?? "the enclave did not ack the RFQ");
-      addLog("Order sealed to the enclave — its contents never touched this browser.", { tone: "muted" });
+      addLog("Your order sealed to the enclave — you wrote it, and no maker can read it.", { tone: "muted" });
 
       setPublishedRfqId(conf.data.rfqId);
       setPublishStage("waiting");
@@ -447,7 +492,32 @@ export default function WalletMode({
       addLog(msg, { tone: "error" });
       setPublishStage("idle");
     }
-  }, [address, xrplAddress, addLog]);
+  }, [address, xrplAddress, terms, orderSize, orderLimit, addLog]);
+
+  // Fetch the order's bounds once the taker has somewhere for the XRP to land. Seeded into the two
+  // inputs as a starting point, not a decision: the size defaults to the minimum block and the limit
+  // to the live mid, and both are the taker's to overwrite before anything is signed.
+  useEffect(() => {
+    if (!xrplAddress || terms || publishedRfqId) return;
+    let cancelled = false;
+    (async () => {
+      const res = await getJSON<{
+        escrow: string;
+        token: string;
+        minBlockRaw: string;
+        midUsdE18: string;
+        maxLimitUsdE18: string;
+        armedSeconds: number;
+      }>("/api/taker/rfq/prepare");
+      if (cancelled || !res.ok || !res.data?.escrow) return;
+      setTerms(res.data);
+      setOrderSize((s) => s || formatUnits(res.data!.minBlockRaw, 6));
+      setOrderLimit((l) => l || Number(formatUnits(res.data!.midUsdE18, 18)).toFixed(6));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [xrplAddress, terms, publishedRfqId]);
 
   // Watch the chain for a fill. The answer only counts if the escrow says it, so this reads
   // matches(rfqId) rather than trusting any server-side record of what happened.
@@ -990,29 +1060,70 @@ export default function WalletMode({
             <p className="mono-label text-[0.5rem] text-ink-3">optional</p>
           </div>
           <p className="text-[0.88rem] leading-[1.55] text-ink-2 mt-2 max-w-[62ch]">
-            Put your sealed order in the shared queue instead of trading against the house. A maker
-            in another window can quote it — without reading your side, size, or limit — and the
+            Write your own order and put it in the shared queue instead of trading against the house.
+            A maker in another window can quote it — without reading your size or limit — and the
             enclave awards it to the best price.
           </p>
+
+          {/* Two fields, because these two numbers ARE the order. The desk used to write them and
+              seal the result, which hid the order from the maker while leaving it in plain sight of
+              the venue. Bounds come from chain state, not from constants sitting in this file. */}
+          <div className="grid grid-cols-2 gap-3 mt-4 max-w-[42ch]">
+            <label className="block">
+              <span className="mono-label text-[0.52rem] text-ink-3">Size · FXRP</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={orderSize}
+                onChange={(e) => setOrderSize(e.target.value)}
+                disabled={publishStage !== "idle"}
+                className="mono-data text-[0.8rem] text-ink bg-vault-2/60 border border-steel-line w-full px-2.5 py-1.5 mt-1.5 focus:border-ice/60 focus:outline-none disabled:opacity-40"
+              />
+              {terms && (
+                <span className="mono-label text-[0.5rem] text-ink-3 block mt-1">
+                  min {formatUnits(terms.minBlockRaw, 6)}
+                </span>
+              )}
+            </label>
+            <label className="block">
+              <span className="mono-label text-[0.52rem] text-ink-3">Your limit · USD</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={orderLimit}
+                onChange={(e) => setOrderLimit(e.target.value)}
+                disabled={publishStage !== "idle"}
+                className="mono-data text-[0.8rem] text-ink bg-vault-2/60 border border-steel-line w-full px-2.5 py-1.5 mt-1.5 focus:border-ice/60 focus:outline-none disabled:opacity-40"
+              />
+              {terms && (
+                <span className="mono-label text-[0.5rem] text-ink-3 block mt-1">
+                  fillable up to {Number(formatUnits(terms.maxLimitUsdE18, 18)).toFixed(4)}
+                </span>
+              )}
+            </label>
+          </div>
+          <p className="mono-label text-[0.5rem] text-ink-3 mt-2.5 max-w-[62ch] leading-snug">
+            The lowest price you will sell at. The enclave discards every quote below it, and the
+            escrow re-reads the FTSOv2 mid at lock() — so a limit outside the band cannot fill.
+          </p>
+
           <button
             type="button"
             onClick={runPublishRfq}
-            disabled={publishStage !== "idle"}
+            disabled={publishStage !== "idle" || !terms}
             className="mono-label text-[0.64rem] mt-4 px-5 py-2.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
           >
             {publishStage === "idle"
               ? publishError
                 ? "Retry publish"
                 : "Publish my RFQ"
-              : publishStage === "sealing"
-                ? "Reading the escrow…"
-                : publishStage === "approving"
-                  ? "Confirm approve in wallet…"
-                  : publishStage === "depositing"
-                    ? "Confirm deposit in wallet…"
-                    : publishStage === "submitting"
-                      ? "Sealing to the enclave…"
-                      : "Waiting for the enclave…"}
+              : publishStage === "approving"
+                ? "Confirm approve in wallet…"
+                : publishStage === "depositing"
+                  ? "Confirm deposit in wallet…"
+                  : publishStage === "submitting"
+                    ? "Sealing your order…"
+                    : "Waiting for the enclave…"}
           </button>
           {publishError && <p className="mono-label text-[0.6rem] text-iron-red mt-3">{publishError}</p>}
         </div>

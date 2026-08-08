@@ -326,29 +326,43 @@ export async function buildOpenRfq(env: MakerEnv): Promise<OpenRfqResult> {
   };
 }
 
-export interface TakerRfqPrepare {
+export interface TakerRfqTerms {
   escrow: string;
-  approve: { token: string; spender: string; amount: string };
-  deposit: { amount: string; armedUntil: string };
+  token: string;
+  minBlockRaw: string;
+  midUsdE18: string;
+  maxLimitUsdE18: string;
+  armedSeconds: number;
 }
 
-/** The escrow parameters a taker must fund from their OWN wallet before publishing.
+/** The bounds a taker's order has to satisfy — so they can write one, rather than be handed one.
  *
- *  Deliberately just constants — no order data crosses this route in either direction. The size a
- *  taker deposits is MIN_BLOCK_FXRP, the same figure every RFQ on this desk carries, so even the
- *  deposit amount discloses nothing about the order behind it. */
-export async function buildTakerRfqPrepare(env: MakerEnv): Promise<TakerRfqPrepare> {
+ *  This route used to return a fixed deposit amount, because the desk composed every RFQ itself:
+ *  side, size and limit were all server-side constants and the taker supplied only an address. That
+ *  made "the desk cannot read your order" true in a hollow way — nothing is hidden from the party
+ *  that wrote it. The taker states the order now; the desk only seals it.
+ *
+ *  Every bound here is read from the system that enforces it, never asserted:
+ *    - minBlockRaw is the escrow's MIN_BLOCK_FXRP. The enclave's AddRFQ rejects below it
+ *      (ErrBelowMinBlock) and lock() rejects below it (BelowMinBlock) — two enforcers, one number.
+ *    - midUsdE18 is the live FTSOv2 mid; maxLimitUsdE18 is mid * (1 + BAND_BIPS), the highest limit
+ *      any quote could legally clear, because lock() re-checks that band onchain. Above it an RFQ is
+ *      not merely unlikely to fill — it cannot. */
+export async function buildTakerRfqTerms(env: MakerEnv): Promise<TakerRfqTerms> {
   const clients: DemoClients = await setupClients(env, { requireOwnerIsTeeSigner: false });
-  const { escrow, fxrp } = clients;
+  const { escrow, fxrp, ftso } = clients;
 
   const minBlock: bigint = await escrow.MIN_BLOCK_FXRP();
-  const escrowAddress = await escrow.getAddress();
-  const armedUntil = Math.floor(Date.now() / 1000) + MAKER_MODE_ARMED_SECONDS + 300;
+  const bandBips: bigint = await escrow.BAND_BIPS();
+  const { mid18 } = await readLiveFtsoMid(ftso);
 
   return {
-    escrow: escrowAddress,
-    approve: { token: await fxrp.getAddress(), spender: escrowAddress, amount: minBlock.toString() },
-    deposit: { amount: minBlock.toString(), armedUntil: String(armedUntil) },
+    escrow: await escrow.getAddress(),
+    token: await fxrp.getAddress(),
+    minBlockRaw: minBlock.toString(),
+    midUsdE18: mid18.toString(),
+    maxLimitUsdE18: ((mid18 * (BigInt(10000) + bandBips)) / BigInt(10000)).toString(),
+    armedSeconds: MAKER_MODE_ARMED_SECONDS + 300,
   };
 }
 
@@ -374,21 +388,42 @@ export async function buildTakerRfqPrepare(env: MakerEnv): Promise<TakerRfqPrepa
 export async function publishTakerRfq(
   env: MakerEnv,
   takerAddress: string,
-  xrplAddress: string
+  xrplAddress: string,
+  fxrpAmountRaw: bigint,
+  limitPriceUsdE18: bigint
 ): Promise<{ rfqId: string; windowEndsAt: number }> {
   const clients: DemoClients = await setupClients(env, { requireOwnerIsTeeSigner: false });
   const { escrow, ftso } = clients;
 
+  // Re-check the taker's own numbers against the same two enforcers the terms were read from. This
+  // is not distrust of the browser so much as refusal to spend a sealing round trip on an order that
+  // provably cannot fill — and to fail with a sentence instead of an opaque WD_ERR_ from the enclave.
   const minBlock: bigint = await escrow.MIN_BLOCK_FXRP();
-  const { mid18 } = await readLiveFtsoMid(ftso);
-  const takerLimit = (mid18 * TAKER_LIMIT_NUM) / TAKER_LIMIT_DEN;
+  if (fxrpAmountRaw < minBlock) {
+    throw new Error(`minimum block is ${minBlock} raw FXRP — the enclave rejects anything smaller`);
+  }
+  if (limitPriceUsdE18 <= BigInt(0)) {
+    throw new Error("limit price must be positive");
+  }
 
+  const bandBips: bigint = await escrow.BAND_BIPS();
+  const { mid18 } = await readLiveFtsoMid(ftso);
+  const maxLimit = (mid18 * (BigInt(10000) + bandBips)) / BigInt(10000);
+  if (limitPriceUsdE18 > maxLimit) {
+    throw new Error(
+      `a limit above ${maxLimit} can never fill: lock() re-reads the FTSOv2 mid and rejects any ` +
+        `price more than ${Number(bandBips) / 100}% away from it`
+    );
+  }
+
+  // The desk's own hand appears nowhere in this payload any more. Side is the only field still
+  // fixed, and only because the escrow itself implements exactly one direction.
   const ack = await submitSealedRfq(env, takerAddress, {
     v: 1,
     taker: takerAddress,
     side: "SELL_FXRP",
-    fxrpAmountRaw: minBlock.toString(),
-    limitPriceUsdE18: takerLimit.toString(),
+    fxrpAmountRaw: fxrpAmountRaw.toString(),
+    limitPriceUsdE18: limitPriceUsdE18.toString(),
     xrplAddress,
   });
 
