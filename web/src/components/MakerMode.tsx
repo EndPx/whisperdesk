@@ -1485,26 +1485,30 @@ export default function MakerMode({
             ) : (
               payMethod === null && (
                 <div className="flex flex-wrap items-center gap-3">
-                  {/* Funding a throwaway account leads: it pays within seconds, where paying by hand
-                      means opening a wallet and copying an address and a tag against a window that
-                      is only PAYMENT_WINDOW seconds wide (180s on the deployed escrow). */}
-                  <button
-                    type="button"
-                    onClick={runAutoPay}
-                    className="mono-label text-[0.68rem] px-5 py-2.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300"
-                  >
-                    Fund a throwaway XRPL account for me
-                  </button>
+                  {/* Paying it yourself leads now. The throwaway account used to, on the grounds that
+                      it settles in seconds against a 180s PAYMENT_WINDOW — true, and still the faster
+                      option. But its seed is generated and held by this server, and a desk holding
+                      one side's payment key is not a third party, whatever the escrow says. The
+                      convenience stays; it stops being what we steer people to. */}
                   <button
                     type="button"
                     onClick={runManualPay}
+                    className="mono-label text-[0.68rem] px-5 py-2.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300"
+                  >
+                    Pay from my own XRPL wallet
+                  </button>
+                  <button
+                    type="button"
+                    onClick={runAutoPay}
                     className="mono-label text-[0.64rem] px-4 py-2.5 border border-steel-line-2 text-ink-2 hover:text-ink hover:border-ice-deep/60 transition-colors duration-300"
                   >
-                    I&apos;ll pay it myself
+                    Or have the desk fund a throwaway account
                   </button>
-                  <span className="mono-label text-[0.56rem] text-ink-3 basis-full">
-                    Paying it yourself only works if a funded XRPL testnet wallet is already open —
-                    the window above is the real on-chain deadline, not a UI timer.
+                  <span className="mono-label text-[0.56rem] text-ink-3 basis-full leading-relaxed">
+                    Paying it yourself is what a real maker does, and the escrow credits the payment
+                    however it arrives — it only needs a funded XRPL testnet wallet already open,
+                    because the window above is the on-chain deadline, not a UI timer. The throwaway
+                    is faster, but this server generates and holds its key.
                   </span>
                 </div>
               )
