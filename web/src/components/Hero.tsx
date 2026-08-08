@@ -65,12 +65,16 @@ export default function Hero() {
 
         <div id="hero-ctas" className="mt-10 flex flex-wrap items-center gap-4">
           {/* The primary CTA leaves the page. Both buttons used to be in-page anchors, which meant
-              the hero — the one screen every judge sees — offered no route to the live demo at all. */}
+              the hero — the one screen every judge sees — offered no route to the app at all.
+
+              Same words as the nav button, because it is the same destination and the same act.
+              "Watch it settle live" also cast the visitor as an audience; they are not here to
+              watch, they are here to trade with their own wallet. */}
           <a
             href="/demo"
             className="px-6 py-3 bg-ice text-vault-0 font-medium text-[0.95rem] hover:bg-ice-deep hover:text-ink transition-colors duration-300"
           >
-            Watch it settle live
+            Launch app
           </a>
           <a
             href="#flow"

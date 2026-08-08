@@ -30,12 +30,16 @@ export default function TopBar() {
           ))}
         </nav>
         {/* Primary, not a bordered afterthought: once a visitor has scrolled past the hero this
-            is the only door to the live demo, so it must outweigh the section links beside it. */}
+            is the only door to the live app, so it must outweigh the section links beside it.
+
+            "Launch app", not "Enter the desk". The themed phrasing read like an invitation to a
+            guided tour; this is the app, and the conventional dapp wording says so without asking
+            the visitor to decode a metaphor first. */}
         <Link
           href="/demo"
           className="mono-label text-[0.68rem] px-4 py-2.5 bg-ice text-vault-0 hover:bg-ice-deep hover:text-ink transition-colors duration-300 shrink-0"
         >
-          Enter the desk
+          Launch app
         </Link>
       </div>
     </header>

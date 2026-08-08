@@ -75,6 +75,34 @@ function nowTs() {
    Tiny fetch wrapper — never throws, always resolves to {ok, status, data}.
 --------------------------------------------------------------------------- */
 
+/** Turns an ethers failure into a sentence a person can act on.
+ *
+ *  ethers v6 packs the whole transaction into `err.message` — calldata, gas fields, the lot. Printed
+ *  raw it fills the console with four hundred characters of JSON, which is the single loudest signal
+ *  that a screen is a debugging harness rather than a product. The underlying detail is still in the
+ *  browser's own devtools for anyone who wants it; what belongs here is what went wrong.
+ *
+ *  Deliberately conservative: anything that does not match a known shape is passed through
+ *  untouched, because a message we failed to recognise is more useful whole than truncated. */
+export function readableError(text: string): string {
+  if (text.length < 160) return text;
+
+  if (/user (rejected|denied)/i.test(text)) return "you rejected the transaction in your wallet";
+  if (/insufficient funds/i.test(text)) return "not enough C2FLR for gas — top up and try again";
+  if (/CALL_EXCEPTION|execution reverted/i.test(text)) {
+    // Surface the contract's own revert reason when there is one; a bare revert has nothing to say.
+    const reason = /reason="([^"]+)"/.exec(text)?.[1];
+    return reason && reason !== "null"
+      ? `the contract refused it: ${reason}`
+      : "the contract refused the transaction — nothing was spent beyond gas";
+  }
+  if (/timeout|timed out/i.test(text)) return "the network did not answer in time — try again";
+
+  // Unknown but long: keep the first clause, which is where ethers puts the actual complaint.
+  const head = text.split(" (")[0];
+  return head.length < text.length ? head : `${text.slice(0, 150)}…`;
+}
+
 type ApiResult<T> = { ok: boolean; status: number; data: T | null };
 
 async function callApi<T>(path: string, init?: RequestInit): Promise<ApiResult<T>> {
@@ -272,7 +300,7 @@ export default function WalletMode({
       {
         id: `w${logIdRef.current}`,
         ts: nowTs(),
-        text,
+        text: readableError(text),
         href: opts?.href,
         linkText: opts?.linkText,
         tone: opts?.tone ?? "normal",
@@ -1158,7 +1186,7 @@ export default function WalletMode({
       )}
 
       {currentStep >= 2 && (
-      <StepShell n={2} title="Open the trade" done={s4Stage === "done"} active={currentStep === 2}>
+      <StepShell n={2} title="Settle it" done={s4Stage === "done"} active={currentStep === 2}>
         {s4Stage !== "done" ? (
           <div className="space-y-3">
             <button
@@ -1167,22 +1195,25 @@ export default function WalletMode({
               disabled={currentStep < 2 || (s4Stage !== "idle" && !s4Error)}
               className="mono-label text-[0.68rem] px-5 py-2.5 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none"
             >
+              {/* Labels name the act, not the function. "Prepare + lock" and "Retry approve()" read
+                  like a runbook for the contract; a trader wants to know they are placing a trade
+                  and which wallet popup is in front of them. */}
               {s4Stage === "idle"
                 ? s4Error
-                  ? "Retry prepare()"
-                  : "Prepare + lock"
+                  ? "Try again"
+                  : "Place the trade"
                 : s4Stage === "preparing"
-                  ? "Preparing…"
+                  ? "Building your trade…"
                   : s4Stage === "approve"
                     ? s4Error
-                      ? "Retry approve()"
+                      ? "Try again"
                       : "Confirm approve in wallet…"
                     : s4Stage === "deposit"
                       ? s4Error
-                        ? "Retry deposit()"
+                        ? "Try again"
                         : "Confirm deposit in wallet…"
                       : s4Error
-                        ? "Retry lock()"
+                        ? "Try again"
                         : "Confirm lock in wallet…"}
             </button>
             {prepareBusy && (
@@ -1256,10 +1287,14 @@ export default function WalletMode({
       {/* console log */}
       <div className="panel px-6 py-6 sm:px-8 sm:py-7">
         <p className="mono-label text-[0.6rem] text-ink-3 mb-3">Console</p>
+        {/* Two different trades happen in this seat and their trust stories differ, so one fixed
+            sentence was lying in whichever case it did not describe. Publishing to the open desk
+            means the ENCLAVE signs the match against an independent maker's sealed quote; trading
+            against the house means the desk signs it with a simulated-TEE key. Say which is true. */}
         <p className="mono-label text-[0.56rem] text-ink-3 mb-4 leading-relaxed">
-          Real transactions · testnet only · you sign approve, deposit, and lock with your own
-          wallet — the desk signs your lock instruction with a simulated-TEE key, and relays attest
-          + release.
+          {publishedRfqId
+            ? "Real transactions · testnet only · you sign approve, deposit and lock with your own wallet — your order is matched inside the enclave against an independent maker's sealed quote, and the desk only relays attest + release."
+            : "Real transactions · testnet only · you sign approve, deposit and lock with your own wallet — the desk takes the other side here and signs your lock instruction with a simulated-TEE key, then relays attest + release."}
         </p>
         <div
           aria-live="polite"

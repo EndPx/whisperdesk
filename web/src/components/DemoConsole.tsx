@@ -6,6 +6,8 @@ import WalletMode from "@/components/WalletMode";
 import MakerMode from "@/components/MakerMode";
 import DeskEntry from "@/components/DeskEntry";
 import RealAssetProof from "@/components/RealAssetProof";
+import AppShell from "@/components/AppShell";
+import { useWalletAccount } from "@/lib/useWalletAccount";
 import { detectProvider, disconnect } from "@/lib/wallet-client";
 
 /* ---------------------------------------------------------------------------
@@ -148,11 +150,48 @@ export default function DemoConsole() {
   const [makerFxrp, setMakerFxrp] = useState(0);
   const [vaultFxrp, setVaultFxrp] = useState(0);
 
+  // The shell's account band. Read here rather than lifted out of the two modes: each of them owns
+  // a rail with far more detail, and duplicating that plumbing upward to fill a header would couple
+  // three components for one line of chrome. This is a cheap read of the same public route.
+  const { address } = useWalletAccount();
+  const [account, setAccount] = useState<{ fxrp: string | null; c2flr: string | null }>({
+    fxrp: null,
+    c2flr: null,
+  });
+
   const [mode, setMode] = useState<"one-click" | "wallet" | "maker">("wallet");
   // The desk opens on a seat picker rather than dropping straight into a mode — see DeskEntry.
   const [seated, setSeated] = useState(false);
   const [walletBusy, setWalletBusy] = useState(false);
   const [makerBusy, setMakerBusy] = useState(false);
+
+  // Refreshed on a slow interval, not per action: balances move when a trade settles, and polling
+  // harder would only spend RPC to show the same figures sooner. Failures leave the last good
+  // values in place — a header that blanks out mid-trade reads as a fault that has not happened.
+  useEffect(() => {
+    if (!address) {
+      setAccount({ fxrp: null, c2flr: null });
+      return;
+    }
+    let cancelled = false;
+    const read = async () => {
+      try {
+        const res = await fetch(`/api/wallet/status?taker=${address}`);
+        if (!res.ok) return;
+        const data: { fxrp?: string; c2flr?: string } = await res.json();
+        if (cancelled) return;
+        setAccount({ fxrp: data.fxrp ?? null, c2flr: data.c2flr ?? null });
+      } catch {
+        /* keep the last good figures */
+      }
+    };
+    void read();
+    const t = setInterval(() => void read(), 20_000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [address]);
 
   const [runPath, setRunPath] = useState<"happy" | "default" | null>(null);
   const [busy, setBusy] = useState(false);
@@ -688,53 +727,36 @@ npm run happy-path`}
     );
   }
 
+  // The two seats are destinations in an application, not steps in a walkthrough. The old
+  // segmented control was structurally the same thing, but with no brand, no network, no account
+  // and no session around it a visitor met a bare panel above a log — which is why the screen read
+  // as a guided demo whatever the buttons were labelled. The shell answers where-am-I,
+  // what-can-I-do-here, which-chain and which-account before anything is clicked, and then stays
+  // put. Switching is blocked mid-settlement, where leaving would strand an open match.
   return (
-    <div className="mt-3">
-      {/* One quiet segmented control, no prose. The seat picker at the door already said what each
-          seat is and what it can see; repeating it above every run turned the working screen into a
-          brochure — which is exactly what a desk should not look like. */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        {(
-          [
-            { role: "wallet", label: "As the taker" },
-            { role: "maker", label: "As the maker" },
-          ] as const
-        ).map((m) => (
-          <button
-            key={m.role}
-            type="button"
-            onClick={() => {
-              userPickedModeRef.current = true;
-              setMode(m.role);
-            }}
-            disabled={switcherDisabled}
-            aria-pressed={mode === m.role}
-            className={`mono-label text-[0.58rem] px-3 py-1.5 border transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none ${
-              mode === m.role
-                ? "border-ice/50 text-ice bg-ice/10"
-                : "border-steel-line-2 text-ink-2 hover:text-ink hover:border-ice-deep/60"
-            }`}
-          >
-            {m.label}
-          </button>
-        ))}
-
-        {/* Sign out sits at the far end, away from the mode buttons: it ends the session rather
-            than switching seats, and the two should not read as neighbours. */}
-        <button
-          type="button"
-          onClick={async () => {
-            await disconnect();
-            setSeated(false);
-            userPickedModeRef.current = false;
-          }}
-          disabled={switcherDisabled}
-          className="mono-label text-[0.58rem] px-3 py-1.5 border border-steel-line-2 text-ink-3 hover:text-iron-red hover:border-iron-red/50 transition-colors duration-300 disabled:opacity-30 disabled:pointer-events-none ml-auto"
-        >
-          Sign out
-        </button>
-      </div>
-
+    <AppShell
+      routes={[
+        { id: "wallet", label: "Trade" },
+        { id: "maker", label: "Make markets" },
+      ]}
+      active={mode}
+      onNavigate={(id) => {
+        if (switcherDisabled) return;
+        userPickedModeRef.current = true;
+        setMode(id as typeof mode);
+      }}
+      address={address}
+      onDisconnect={async () => {
+        await disconnect();
+        setSeated(false);
+        userPickedModeRef.current = false;
+      }}
+      figures={[
+        { label: "FXRP", value: account.fxrp, hint: "Your FAssets FXRP on Coston2" },
+        { label: "C2FLR", value: account.c2flr, hint: "Gas. Not a position, so it carries no price." },
+        { label: "Network", value: "Coston2 · 114" },
+      ]}
+    >
       {mode === "one-click" ? (
         oneClickBody
       ) : mode === "wallet" ? (
@@ -742,6 +764,6 @@ npm run happy-path`}
       ) : (
         <MakerMode onSwitchToOneClick={() => setMode("one-click")} onBusyChange={setMakerBusy} />
       )}
-    </div>
+    </AppShell>
   );
 }
