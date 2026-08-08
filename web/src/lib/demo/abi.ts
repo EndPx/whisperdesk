@@ -26,8 +26,13 @@ export const DVP_ESCROW_ABI = [
   "event MatchRefunded(bytes32 indexed matchId, address indexed taker, uint256 amountFxrp, uint256 bondSlashed)",
 ];
 
+// Still named for its history; it now describes the genuine FAssets FXRP both escrows are wired to.
+// `mint` is gone from this list because it is gone from the token — real FXRP is issued only against
+// XRP locked in the FAssets system, so there is no privileged supply to call. Leaving the entry in
+// let callers keep compiling against a function that reverts inside estimateGas with an unknown
+// selector, which is exactly how it failed. The desk moves FXRP it already holds instead.
 export const MOCK_FXRP_ABI = [
-  "function mint(address to, uint256 amount)",
+  "function transfer(address to, uint256 amount) returns (bool)",
   "function approve(address spender, uint256 amount) returns (bool)",
   "function balanceOf(address) view returns (uint256)",
   "function decimals() view returns (uint8)",

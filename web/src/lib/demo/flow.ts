@@ -87,8 +87,36 @@ export async function readLiveFtsoMid(ftso: ethers.Contract) {
   return { mid18, ts, fee };
 }
 
-/// Mints + approves + deposits `amount` FXRP for `wallet` into the escrow, arming it for
-/// `armedForSeconds` past now.
+/// Tops `wallet` up to `amount` FXRP out of the desk's own reserve, if it is short.
+///
+/// This used to be a `mint()` call, which worked only because the token was MockFXRP. Real FAssets
+/// FXRP has no mint — it exists solely against XRP locked in the FAssets system, which is exactly
+/// what makes settling it mean anything. So the desk moves what it already holds instead, and when
+/// the reserve runs dry it says so plainly rather than reverting inside an estimateGas with an
+/// unknown selector.
+async function ensureFxrpBalance(clients: DemoClients, wallet: ethers.Wallet, amount: bigint) {
+  const { fxrp, ownerWallet } = clients;
+  const have: bigint = await fxrp.balanceOf(wallet.address);
+  if (have >= amount) return;
+
+  const short = amount - have;
+  const reserve: bigint = await fxrp.balanceOf(ownerWallet.address);
+  if (reserve < short) {
+    throw new Error(
+      `the desk is out of FXRP: ${wallet.address} needs ${short} raw more and the reserve holds ` +
+        `${reserve}. Real FAssets FXRP cannot be minted — top the desk up from faucet.flare.network.`
+    );
+  }
+  await (await (fxrp.connect(ownerWallet) as ethers.Contract).transfer(wallet.address, short)).wait();
+}
+
+/// Arms `amount` of `wallet`'s FXRP in the escrow, until `armedForSeconds` from now.
+///
+/// Deposits only what is missing. An escrow balance is not consumed by opening an RFQ — it is
+/// reserved at lock() and returns on release or refund — so a wallet that has traded before usually
+/// still has enough armed, and depositing afresh each time would drain a reserve that cannot be
+/// minted back. When the balance is sufficient but the arming window has run short, `deposit(0, …)`
+/// extends it for free: armedUntil only ever moves forward, and a zero transfer costs nothing.
 export async function fundTakerDeposit(
   clients: DemoClients,
   wallet: ethers.Wallet,
@@ -96,22 +124,40 @@ export async function fundTakerDeposit(
   armedForSeconds = 3600
 ) {
   const { fxrp, escrow } = clients;
-  const fxrpAsWallet = fxrp.connect(wallet) as ethers.Contract;
-  await (await fxrpAsWallet.mint(wallet.address, amount)).wait();
-  await (await fxrpAsWallet.approve(await escrow.getAddress(), amount)).wait();
   const armedUntil = Math.floor(Date.now() / 1000) + armedForSeconds;
   const escrowAsWallet = escrow.connect(wallet) as ethers.Contract;
-  await (await escrowAsWallet.deposit(amount, armedUntil)).wait();
+
+  // Annotated rather than inferred: ethers types contract reads as `any`, and letting TS guess here
+  // silently produced number arithmetic on values that are uint128 on-chain.
+  const bal: { armed: bigint; committed: bigint; armedUntil: bigint } = await escrow.balances(wallet.address);
+  const available: bigint = bal.armed - bal.committed;
+  if (available >= amount) {
+    if (bal.armedUntil < BigInt(armedUntil)) {
+      await (await escrowAsWallet.deposit(0, armedUntil)).wait();
+    }
+    return;
+  }
+
+  const missing = amount - available;
+  await ensureFxrpBalance(clients, wallet, missing);
+  await (await (fxrp.connect(wallet) as ethers.Contract).approve(await escrow.getAddress(), missing)).wait();
+  await (await escrowAsWallet.deposit(missing, armedUntil)).wait();
 }
 
-/// Mints + approves + deposits `amount` FXRP bond for `wallet` into the BondLedger.
+/// Posts whatever bond `wallet` is still short of `amount` into the BondLedger.
+///
+/// Same reasoning as fundTakerDeposit: a posted bond is not spent by quoting, so a maker who has
+/// quoted before usually still has one, and re-posting every time would burn unmintable FXRP.
 export async function fundMakerBond(clients: DemoClients, wallet: ethers.Wallet, amount: bigint) {
   const { fxrp, bondLedger } = clients;
-  const fxrpAsWallet = fxrp.connect(wallet) as ethers.Contract;
-  await (await fxrpAsWallet.mint(wallet.address, amount)).wait();
-  await (await fxrpAsWallet.approve(await bondLedger.getAddress(), amount)).wait();
-  const bondLedgerAsWallet = bondLedger.connect(wallet) as ethers.Contract;
-  await (await bondLedgerAsWallet.depositBond(amount)).wait();
+
+  const free: bigint = await bondLedger.freeBond(wallet.address);
+  if (free >= amount) return;
+
+  const missing = amount - free;
+  await ensureFxrpBalance(clients, wallet, missing);
+  await (await (fxrp.connect(wallet) as ethers.Contract).approve(await bondLedger.getAddress(), missing)).wait();
+  await (await (bondLedger.connect(wallet) as ethers.Contract).depositBond(missing)).wait();
 }
 
 export interface LockResult {

@@ -49,11 +49,21 @@ export async function POST(request: Request) {
     const provider = new ethers.JsonRpcProvider(env.coston2Rpc, COSTON2_CHAIN_ID);
     const ownerWallet = createDemoWallet(env.ownerPrivateKey, provider, "owner");
 
+    // Sends from the desk's own holdings rather than minting — see /api/wallet/faucet for the full
+    // reasoning. Short version: real FAssets FXRP has no mint, so the desk gives away what it has.
     const escrowRead = new ethers.Contract(env.escrowAddress, DVP_ESCROW_ABI, provider);
     const fxrpAddress: string = await escrowRead.FXRP();
     const fxrpAsOwner = new ethers.Contract(fxrpAddress, MOCK_FXRP_ABI, ownerWallet);
 
-    const tx = await fxrpAsOwner.mint(address, FAUCET_MINT_RAW);
+    const reserve: bigint = await fxrpAsOwner.balanceOf(ownerWallet.address);
+    if (reserve < FAUCET_MINT_RAW) {
+      return NextResponse.json(
+        { error: "the desk's FXRP reserve is empty — get FXRP straight from faucet.flare.network" },
+        { status: 503 }
+      );
+    }
+
+    const tx = await fxrpAsOwner.transfer(address, FAUCET_MINT_RAW);
     const receipt = await tx.wait();
 
     const fxrpRead = new ethers.Contract(fxrpAddress, MOCK_FXRP_ABI, provider);
