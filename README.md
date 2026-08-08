@@ -169,31 +169,45 @@ of their orders and cannot pick the winner. This run proves that one.
 The taker wallet was **generated at the start of the run**. Open it on the explorer: it has this
 trade and nothing else. It cannot be the desk's standing counterparty, because ninety seconds
 earlier it did not exist. The maker is a separate key that signed its own EIP-712 quote, having
-never seen the order's side, size or limit.
+never seen the order's size or limit.
+
+And the taker **wrote that order**. The desk publishes two bounds — `MIN_BLOCK_FXRP` off the escrow,
+and `mid × (1 + BAND_BIPS)` off FTSOv2 — each read from the contract that enforces it, and the taker
+picks a size and a limit inside them. That distinction is the difference between a venue and a
+counterparty: sealing an order the desk itself composed would hide it from makers while leaving it
+in plain sight of the party that wrote it.
 
 | Stage | Receipt |
 |---|---|
-| Taker, created during the run | [`0x005c469d…dB9f`](https://coston2-explorer.flare.network/address/0x005c469dF109e34049799BA07bCD89Ac014CdB9f) |
+| Taker, created during the run | [`0x6e6F7743…77AA`](https://coston2-explorer.flare.network/address/0x6e6F7743A94E7748cb195E836f04c1599eF277AA) |
 | Maker, a different key | [`0x35AC3BE4…CE3C`](https://coston2-explorer.flare.network/address/0x35AC3BE4d8D3841f394564983Ed7b3fC3666CE3C) |
-| Taker's own `deposit()` — its transaction, its key | https://coston2-explorer.flare.network/tx/0x8d0e59a3179a53df476b9d9aeaf1e7dff25f36a87863d75cc42cab4a4d8d47f7 |
-| Sealed RFQ published, `rfqId` = `matchId` | `0x9fb96d23…0b99` |
-| Enclave matched the maker's blind quote at 1.035466 USD/XRP | outcome `MATCHED` |
-| XRPL payment — maker → the taker's own account | https://testnet.xrpl.org/transactions/065F32416C4949518407FD6E5FA853CE4A820DD60828C48D5C0C71A873FE0D01 |
-| `release()` — maker received 1.0 FXRP | https://coston2-explorer.flare.network/tx/0xe959c8ebb84dfc79bd8538a119b71798c17251f5bfa8397ab0889d2e46f7e21c |
+| Taker's own `deposit()` — its transaction, its key | https://coston2-explorer.flare.network/tx/0x893978e65bb7fe3004721d3699c30ee6cd27d0130663a9c8c9353738a2907c51 |
+| The order the taker chose | 1.0 FXRP, limit 1.030323 USD (ceiling that run: 1.045856) |
+| Sealed RFQ published, `rfqId` = `matchId` | `0x755f5b90…2abb` |
+| Maker's blind quote, above that limit | 1.035118 USD/XRP → `MATCHED` |
+| XRPL payment — maker → the taker's own account | https://testnet.xrpl.org/transactions/36FFAA9A105019D7B63A08591F6E1AB0A0B5C434FBDF9D86F6BB85E9BE38F323 |
+| `release()` — maker received 1.0 FXRP | https://coston2-explorer.flare.network/tx/0x2da3adc27e340f49ecec8f8023bdb85c899cb292256e5a4eddfae412c796fed0 |
 
-The script asserts against the chain as it goes, and those assertions passed: `matches().taker` ==
-`0x005c469d…`, `matches().maker` == `0x35AC3BE4…`, and the escrow's XRP destination == the taker's
-own XRPL account. Balances after: maker FXRP 3.8 → 4.8, taker XRP 101.000249 on an account that was
-empty an hour earlier.
+The script checks the chain as it goes and those checks passed: `matches().taker` ==
+`0x6e6F7743…`, `matches().maker` == `0x35AC3BE4…`, and the escrow's XRP destination == the taker's
+own XRPL account. Balances after: maker FXRP 4.8 → 5.8, taker XRP 100.999768 on an account that was
+empty minutes earlier.
+
+The bounds are enforced, not decorative — checked live against the deployed API. A size below the
+block minimum, a limit above the band, and a zero limit are each refused with the reason:
+`"minimum block is 1000000 raw FXRP"`, `"a limit above … can never fill: lock() re-reads the FTSOv2
+mid"`, `"limit price must be positive"`.
 
 What the desk did, in full: sealed the order, relayed two permissionless calls, and paid their gas.
 It held neither leg. The FXRP came out of the taker's own escrow deposit, the bond was the maker's
 own, and the XRP went from the maker's XRPL account to the taker's.
 
 Reproduce: `scripts/e2e/two-party-desk.mjs`. It generates a fresh taker on every run, so no two runs
-share a counterparty — this settled twice the same evening with two unrelated takers
-(`0x994DafB2…AD87` was the first, `release()`
-[`0x46353742…90ac`](https://coston2-explorer.flare.network/tx/0x46353742101183d8852ba788a1d3cfb012d7eea9110ece16ec0b7da45f5190ac)).
+share a counterparty — this has now settled three times with three unrelated takers; the earlier two
+released at
+[`0x46353742…90ac`](https://coston2-explorer.flare.network/tx/0x46353742101183d8852ba788a1d3cfb012d7eea9110ece16ec0b7da45f5190ac)
+and
+[`0xe959c8eb…7e21c`](https://coston2-explorer.flare.network/tx/0xe959c8ebb84dfc79bd8538a119b71798c17251f5bfa8397ab0889d2e46f7e21c).
 
 ### The enclave loop — signed by the live enclave, end to end
 
