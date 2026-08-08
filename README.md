@@ -34,13 +34,20 @@ This is a hackathon prototype, and these are its scope boundaries, not apologies
   at `PRODUCTION` status, and our own registry-enforced instruction sender. What simulated mode does
   cost us is a hardware attestation and a persistent identity — the enclave's key regenerates on
   every restart by design, which is why `scripts/enclave-loop/monitor.mjs` watches for exactly that.
-- **Two RFQ ingresses exist, and both work.** The onchain one is the real design:
-  `WhisperDeskInstructionSender.submitRfq` is the registry-enforced instruction sender for our
-  extension and stamps the taker from `msg.sender`, so the identity cannot be forged — a full
-  settlement has run through it end to end (receipts below). The one-click *demo* on the website
-  still uses `POST /direct` (API-keyed, `WD_ALLOW_DIRECT_RFQ=true`), where the taker is
-  self-attested, because it has to finish inside a browser session rather than wait on the auction
-  window plus two extra onchain transactions.
+- **Two RFQ ingresses exist. The onchain one is the design; the live site is on the other one
+  today.** `WhisperDeskInstructionSender.submitRfq` is the registry-enforced instruction sender for
+  our extension and stamps the taker from `msg.sender`, so the identity cannot be forged — a full
+  settlement has run through it end to end (receipts below), and it is still what the contract
+  does. It reaches the enclave through Flare's hosted FTDC proxy, and that proxy now answers our
+  machine-availability check with a 404, so nothing routes that way at the moment. Everything on
+  the website therefore goes over `POST /direct` (API-keyed, `WD_ALLOW_DIRECT_RFQ=true`), where the
+  taker in the envelope is **self-attested** rather than stamped. Be precise about what that costs:
+  it costs attribution, not safety. `lock()` reserves the FXRP from the named taker's *own* armed
+  escrow deposit and pays the XRP to the address sealed beside it, so naming someone else either
+  settles the trade to them or cannot lock at all — a forged taker cannot be made to profit the
+  forger. What is genuinely lost is the chain proving *who wrote the order*. The match trigger
+  moved to `/direct` too and loses nothing at all: `RFQ_MATCH` is permissionless on both ingresses,
+  carries no secret, and names no party.
 - **Every trade you can run here is 1 FXRP, not an institutional block.** The desk's canonical
   policy is a 5,000 FXRP minimum block (`MIN_BLOCK_FXRP`); the deployed integration
   instance (`contracts/script/DeployIntegration.s.sol`) sets it to `1e6` (1 FXRP) instead, because a
@@ -152,6 +159,39 @@ then funded by transfer from that balance — the run's transcript says so expli
 
 Reproduce: `FXRP_ADDRESS=0x0b6A3645c240605887a5532109323A3E12273dc7 forge script script/DeployIntegration.s.sol --rpc-url coston2 --broadcast --slow`, then point `happy-path.mjs` at the printed escrow.
 
+### Two strangers, one block, and a desk on neither side
+
+Every other receipt in this README has the desk holding a leg — it signs as maker in wallet mode, it
+stands in as taker in maker mode. That proves the machinery works. It does not prove the *product*,
+which claims two parties who have never met can trade a block through a venue that can read neither
+of their orders and cannot pick the winner. This run proves that one.
+
+The taker wallet was **generated at the start of the run**. Open it on the explorer: it has this
+trade and nothing else. It cannot be the desk's standing counterparty, because ninety seconds
+earlier it did not exist. The maker is a separate key that signed its own EIP-712 quote, having
+never seen the order's side, size or limit.
+
+| Stage | Receipt |
+|---|---|
+| Taker, created during the run | [`0x994DafB2…AD87`](https://coston2-explorer.flare.network/address/0x994DafB28E0Bc37153100b541eB3A9d8A75EAD87) |
+| Maker, a different key | [`0x35AC3BE4…CE3C`](https://coston2-explorer.flare.network/address/0x35AC3BE4d8D3841f394564983Ed7b3fC3666CE3C) |
+| Taker's own `deposit()` — its transaction, its key | https://coston2-explorer.flare.network/tx/0x65d9527d7775225ff94469e3b2dffd892a1bbda98eccd36c3cbf2b2471413cd8 |
+| Sealed RFQ published, `rfqId` = `matchId` | `0xe5e89cfb…9316` |
+| Enclave matched the maker's blind quote at 1.025878 USD/XRP | outcome `MATCHED` |
+| XRPL payment — maker → the taker's own account | https://testnet.xrpl.org/transactions/AA65E989AB21609F284A9D0C1608ED5D517E5E3A54B8ADD953D17E038634F75E |
+| `release()` — maker received 1.0 FXRP | https://coston2-explorer.flare.network/tx/0x46353742101183d8852ba788a1d3cfb012d7eea9110ece16ec0b7da45f5190ac |
+
+Verified after the fact, straight off the chain: `matches().state == 2` (Released), `taker` ==
+`0x994DafB2…`, `maker` == `0x35AC3BE4…`, `takerXrplAddressHash` == `keccak256` of the taker's own
+XRPL address, maker FXRP 2.8 → 3.8, taker XRP 100 → 101.
+
+What the desk did, in full: sealed the order, relayed two permissionless calls, and paid their gas.
+It held neither leg. The FXRP came out of the taker's own escrow deposit, the bond was the maker's
+own, and the XRP went from the maker's XRPL account to the taker's.
+
+Reproduce: `scripts/e2e/two-party-desk.mjs` (generates a fresh taker on every run, so no two runs
+share a counterparty).
+
 ### The enclave loop — signed by the live enclave, end to end
 
 The run below is the one that matters for Bounty 2: **nothing was self-signed**. A sealed (ECIES)
@@ -218,10 +258,13 @@ checks the registry/instruction binding live), `cd contracts && forge test` (the
 and the explorer receipts linked throughout this README.
 
 Scope note: the receipts in *this* table came in over `POST /direct` with `WD_ALLOW_DIRECT_RFQ=true`,
-where the taker identity in the envelope is self-attested. That is the ingress the website's
-one-click demo uses, because it has to finish inside a browser session. The chain-authenticated
-ingress — `WhisperDeskInstructionSender.submitRfq`, which stamps the taker from `msg.sender` — is
-deployed, registry-enforced, and has settled end to end; its receipts are in the next section.
+where the taker identity in the envelope is self-attested. That is the ingress the whole website
+runs on today. The chain-authenticated ingress — `WhisperDeskInstructionSender.submitRfq`, which
+stamps the taker from `msg.sender` — is deployed, registry-enforced, and has settled end to end;
+its receipts are in the next section. It is not reachable right now: Flare's hosted FTDC proxy
+answers our machine-availability check with a 404, so instructions submitted that way never arrive.
+That is a routing failure outside our contracts, and it is why the live seats moved to `/direct`
+rather than sit broken.
 Everything downstream of either ingress is identical: sealing, in-enclave matching, EIP-712 maker
 auth, enclave signing, and the onchain `ecrecover` check. The enclave runs in simulated-TEE mode
 (`magic_pass`), and its identity key regenerates on every restart by design — which is exactly
@@ -343,7 +386,7 @@ custody.
 
 What it would take to make this real, in order:
 
-1. Onchain `submitRfq` ingress — `WhisperDeskInstructionSender.submitRfq` binds `msg.sender`, removing the self-attested taker in `POST /direct`.
+1. Get the onchain ingress routing again — the contract half is built, registry-enforced and proven; what is missing is a TEE machine registration Flare's hosted proxy will accept. Until then the live site's taker is self-attested.
 2. ~~Real FAssets FXRP~~ — done: both escrows settle the FAssets asset directly.
 3. Persistent TEE identity + real attestation — replace `magic_pass` with genuine remote attestation and a key that survives restarts.
 4. Maker onboarding — let more than one maker register into the sealed book, not just the demo pair.

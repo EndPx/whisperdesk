@@ -37,6 +37,14 @@ checks that the message is `abi.encode(<the transaction's own sender>, <ECIES ci
 the taker address was stamped by `WhisperDeskInstructionSender` from `msg.sender`, not supplied by
 the client. A caller cannot claim to be a different taker through this path.
 
+**What it does not prove:** that the path is carrying traffic today. It is not. Onchain instructions
+reach the enclave through Flare's hosted FTDC proxy, which currently answers our machine-availability
+check with a 404, so the live site submits over `POST /direct` with a self-attested taker instead.
+The binding this script checks is real and still in the contract; the routing in front of it is
+down. What keeps a self-attested taker honest meanwhile is the escrow rather than the ingress —
+`lock()` reserves the FXRP from the named taker's own armed deposit and pays the XRP to the address
+sealed beside it.
+
 ## 3. Contract suite — do the settlement rules hold?
 
 ```bash

@@ -13,13 +13,24 @@ two RFQ ingresses below, then watches the escrow's onchain state.
 
 ## 2. Two RFQ ingresses
 
-| Ingress | Path | Taker identity | Used by |
+| Ingress | Path | Taker identity | Status |
 |---|---|---|---|
-| Onchain | `WhisperDeskInstructionSender.submitRfq` (`0x56A903F408C4745D34354Ec230BbfBDD78eC6426`) | Stamped from `msg.sender` — cannot be forged. The TEE registry enforces this contract as the only valid instruction origin for extension `65641`. | The chain-authenticated path — has settled end to end. |
-| Direct | `POST /direct` (API-keyed, `WD_ALLOW_DIRECT_RFQ=true`) | Self-attested in the request envelope. | The website's one-click demo, which has to finish inside a browser session rather than wait on the auction window plus two extra onchain transactions. |
+| Onchain | `WhisperDeskInstructionSender.submitRfq` (`0x56A903F408C4745D34354Ec230BbfBDD78eC6426`) | Stamped from `msg.sender` — cannot be forged. The TEE registry enforces this contract as the only valid instruction origin for extension `65641`. | The design. Deployed, registry-enforced, and has settled end to end. Not routing today. |
+| Direct | `POST /direct` (API-keyed, `WD_ALLOW_DIRECT_RFQ=true`) | Self-attested in the request envelope. | What the live site runs on. |
 
 Both feed the same enclave, the same matching, and the same escrow logic downstream — the
 difference is only how the taker's identity gets asserted going in.
+
+The onchain ingress reaches the enclave through Flare's hosted FTDC proxy, and that proxy currently
+answers our machine-availability check with a 404, so instructions sent that way never arrive. The
+contract half is built and proven; the routing half is not ours. Rather than leave the live seats
+broken, both `RFQ_SUBMIT` and `RFQ_MATCH` go over `/direct` today.
+
+Be exact about the cost, because it differs by command. `RFQ_MATCH` loses nothing — permissionless
+on either ingress, carries no secret, names no party. `RFQ_SUBMIT` loses the `msg.sender` stamp,
+which costs **attribution, not safety**: `lock()` reserves the FXRP from the named taker's own armed
+deposit and pays the XRP to the address sealed beside it, so naming someone else either settles the
+trade to them or cannot lock at all. What is lost is the chain proving who authored the order.
 
 ## 3. FCC enclave
 
@@ -94,11 +105,16 @@ notional**, no fund theft possible.
   the complete loop end to end: the RFQ is sealed (ECIES) into the live enclave, your quote is
   authenticated inside it by EIP-712, and the enclave itself matches the order and signs the
   `MatchInstruction` with its own key before the escrow will accept it.
-- **One-click** (desk-held testnet keys, rate-limited) and **taker mode** (your own MetaMask, XRP
-  lands on an address you control) settle against a **desk-signed instruction** over `POST
-  /direct` instead — the same `WD_MATCH_V1` / `ecrecover` scheme and the same downstream escrow
-  logic, but the RFQ arrives with a self-attested taker rather than waiting on the live enclave's
-  blind match.
+- **Taker mode — publish to the open desk** runs that same complete loop from the other chair. Your
+  order goes into the shared queue instead of trading against the house, a maker in another browser
+  quotes it blind, and the enclave picks the winner. This is the only path where the desk holds
+  **neither** leg: it seals, relays two permissionless calls, and pays their gas. Receipts for a
+  settled two-party trade — with a taker wallet generated during the run — are in
+  [Contracts & receipts](../reference/contracts-and-receipts.md).
+- **One-click** (desk-held testnet keys, rate-limited) and **taker mode against the house** settle
+  against a **desk-signed instruction** instead — the same `WD_MATCH_V1` / `ecrecover` scheme and
+  the same downstream escrow logic, but the desk stands in as maker rather than waiting on the live
+  enclave's blind match.
 
 Everything downstream of either path — `lock()`, the FTSOv2 band check, the FDC-proven XRPL
 payment, `release()` or `refund()` — is identical.
