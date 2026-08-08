@@ -142,6 +142,19 @@ function toNumOrNull(v: string | undefined): number | null {
 
 type Countdown = { nowChain: number; refundAfter: number; graceSeconds: number; fetchedAt: number };
 
+/** Four decimals, grouped — the precision a desk quotes balances at.
+ *
+ *  The chain hands back the full float (`198.349284699998`), and printing that verbatim is the
+ *  tell that a screen forwards data rather than presenting it. Four places is enough to see a
+ *  gas balance move and few enough to read at a glance; anyone who needs the exact figure has an
+ *  explorer. Falsy input stays null so the band shows a dash rather than a confident zero. */
+function fmtBalance(raw: string | undefined): string | null {
+  if (!raw) return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return null;
+  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+}
+
 export default function DemoConsole() {
   const [enabled, setEnabled] = useState<boolean | null>(null); // null = still checking
   const [escrow, setEscrow] = useState<string | null>(null);
@@ -180,7 +193,7 @@ export default function DemoConsole() {
         if (!res.ok) return;
         const data: { fxrp?: string; c2flr?: string } = await res.json();
         if (cancelled) return;
-        setAccount({ fxrp: data.fxrp ?? null, c2flr: data.c2flr ?? null });
+        setAccount({ fxrp: fmtBalance(data.fxrp), c2flr: fmtBalance(data.c2flr) });
       } catch {
         /* keep the last good figures */
       }

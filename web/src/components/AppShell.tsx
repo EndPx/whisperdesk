@@ -76,11 +76,11 @@ export default function AppShell({
     <div className="mt-3">
       <header className="border border-steel-line bg-vault-2/50">
         {/* Row one: identity, destinations, session. */}
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-3 px-4 sm:px-5 py-3">
-          <div className="flex items-center gap-2.5 shrink-0">
-            <WhisperMark className="h-[18px] w-[18px] text-ice" />
-            <span className="mono-label text-[0.68rem] text-ink tracking-[0.08em]">WhisperDesk</span>
-          </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-3 px-4 sm:px-5 py-3">
+          {/* The mark, not the wordmark. The page header directly above already says WhisperDesk
+              and carries the way out; repeating the name here stacked two identities on one screen.
+              A single glyph keeps the bar anchored without competing with it. */}
+          <WhisperMark className="h-[18px] w-[18px] text-ice shrink-0" />
 
           <nav className="flex items-center gap-1 min-w-0" aria-label="Desk sections">
             {routes.map((r) => {
