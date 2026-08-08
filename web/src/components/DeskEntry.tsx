@@ -171,8 +171,7 @@ export default function DeskEntry({ onPick }: { onPick: (role: DeskRole) => void
 
               {blocked && (
                 <p className="mono-label text-[0.52rem] text-ink-3 mt-2.5 leading-relaxed">
-                  This seat signs its own transactions. The no-setup seat settles for real without
-                  one.
+                  Both seats sign their own transactions, so this one needs a wallet in the browser.
                 </p>
               )}
               {mustConnect && connectError && (
@@ -183,13 +182,18 @@ export default function DeskEntry({ onPick }: { onPick: (role: DeskRole) => void
         })}
       </div>
 
-      {/* This used to claim that opening a second window matched two outside parties against each
-          other. It does not: /api/maker/open-rfq has the desk act as taker, and wallet mode has it
-          act as maker, so the two seats never meet. Say what actually happens instead. */}
+      {/* This paragraph has been wrong twice, in opposite directions. It first claimed a second
+          window matched two outside parties; it did not, so it was corrected to say the desk always
+          takes the other side. That is now the stale half: the taker seat can publish into the
+          shared queue, where a maker in another browser quotes it and the desk holds neither leg.
+          Both sentences below are load-bearing — the first is what happens by default, the second
+          is what the product is actually for. */}
       <p className="mono-label text-[0.54rem] text-ink-3 mt-4 max-w-[80ch] leading-snug">
-        All three run a real lock → pay → attest → release on Coston2 + XRPL testnet. The desk takes
-        the other side of whichever seat you pick — maker when you take, taker when you make — so the
-        keys, the signature and the payment on your side are genuinely yours.
+        Both seats run a real lock → pay → attest → release on Coston2 + XRPL testnet. By default the
+        desk takes the other side of the seat you pick — maker when you take, taker when you make —
+        so the keys, the signature and the payment on your side are genuinely yours. Publish your
+        order to the open desk instead and the desk steps out entirely: a maker in another window
+        quotes it blind, and the trade settles between the two of you.
       </p>
     </div>
   );
