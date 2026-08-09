@@ -742,8 +742,8 @@ npm run happy-path`}
             : undefined
         }
         figures={[
-          { label: "FXRP", value: account.fxrp, hint: "Your FAssets FXRP on Coston2" },
-          { label: "C2FLR", value: account.c2flr, hint: "Gas. Not a position, so it carries no price." },
+          { label: "FXRP", token: "FXRP", value: account.fxrp, hint: "Your FAssets FXRP on Coston2" },
+          { label: "C2FLR", token: "C2FLR", value: account.c2flr, hint: "Gas. Not a position, so it carries no price." },
           { label: "Network", value: "Coston2 · 114" },
         ]}
       >
@@ -778,16 +778,13 @@ npm run happy-path`}
   // put. Switching is blocked mid-settlement, where leaving would strand an open match.
   return (
     <AppShell
-      routes={[
-        { id: "wallet", label: "Trade" },
-        { id: "maker", label: "Make markets" },
-      ]}
-      active={mode}
-      onNavigate={(id) => {
-        if (switcherDisabled) return;
-        userPickedModeRef.current = true;
-        setMode(id as typeof mode);
-      }}
+      /* One destination, always. Splitting the nav into Trade / Make markets was the seat picker
+         coming back under a new name: the bar changed identity the instant you acted, so the app
+         appeared to become a different app. You are on the desk either way — writing an order or
+         quoting one is something you DO here, not somewhere you go. */
+      routes={[{ id: "desk", label: "Desk" }]}
+      active="desk"
+      onNavigate={() => {}}
       address={address}
       onDisconnect={async () => {
         await disconnect();
@@ -795,8 +792,8 @@ npm run happy-path`}
         userPickedModeRef.current = false;
       }}
       figures={[
-        { label: "FXRP", value: account.fxrp, hint: "Your FAssets FXRP on Coston2" },
-        { label: "C2FLR", value: account.c2flr, hint: "Gas. Not a position, so it carries no price." },
+        { label: "FXRP", token: "FXRP", value: account.fxrp, hint: "Your FAssets FXRP on Coston2" },
+        { label: "C2FLR", token: "C2FLR", value: account.c2flr, hint: "Gas. Not a position, so it carries no price." },
         { label: "Network", value: "Coston2 · 114" },
       ]}
     >
@@ -805,26 +802,28 @@ npm run happy-path`}
           gone. Keeping the book mounted means other people's orders keep arriving in front of you
           while your own trade settles — which is what a desk looks like, and is also the thing this
           product is claiming. */}
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_20rem] gap-3 items-start">
-        <div className="min-w-0">
-          {mode === "one-click" ? (
-            oneClickBody
-          ) : mode === "wallet" ? (
-            <WalletMode onSwitchToOneClick={() => setMode("one-click")} onBusyChange={setWalletBusy} />
-          ) : (
-            <MakerMode onSwitchToOneClick={() => setMode("one-click")} onBusyChange={setMakerBusy} />
-          )}
-        </div>
+      {/* Above the trade, full width — not a third column. Both flows already render their own
+          right-hand rail, so squeezing the book in beside it produced three columns of chrome and a
+          cramped book. Here it stays legible and the trade below keeps the width it was designed
+          for, while other people's orders still arrive in front of you as yours settles. */}
+      <OpenOrdersBook
+        gated={!address}
+        compact
+        onFillOrder={() => {
+          if (switcherDisabled) return; // mid-settlement; leaving would strand an open match
+          userPickedModeRef.current = true;
+          setMode("maker");
+        }}
+      />
 
-        <OpenOrdersBook
-          gated={!address}
-          compact
-          onFillOrder={() => {
-            if (switcherDisabled) return; // mid-settlement; leaving would strand an open match
-            userPickedModeRef.current = true;
-            setMode("maker");
-          }}
-        />
+      <div className="mt-3">
+        {mode === "one-click" ? (
+          oneClickBody
+        ) : mode === "wallet" ? (
+          <WalletMode onSwitchToOneClick={() => setMode("one-click")} onBusyChange={setWalletBusy} />
+        ) : (
+          <MakerMode onSwitchToOneClick={() => setMode("one-click")} onBusyChange={setMakerBusy} />
+        )}
       </div>
     </AppShell>
   );

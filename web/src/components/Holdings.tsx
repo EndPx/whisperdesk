@@ -27,6 +27,15 @@ export type HoldingToken = "FXRP" | "XRP" | "C2FLR";
  *  every number that is. */
 const PRICED: HoldingToken[] = ["FXRP", "XRP"];
 
+/** Four decimals, grouped — the precision a desk quotes balances at. Null stays a dash, never a
+ *  confident zero. */
+function fmtAmount(raw: string | null | undefined): string {
+  if (!raw) return "—";
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return "—";
+  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+}
+
 function usd(amount: string | null, xrpUsd: number | null): string | null {
   if (amount === null || xrpUsd === null) return null;
   const n = Number(amount);
@@ -99,8 +108,11 @@ function Row({
         <p className="mono-label text-[0.54rem] text-ink-3 mt-1.5 leading-none">{TOKEN_SUB[token]}</p>
       </div>
       <div className="text-right">
-        {/* A dash, never a zero, while a balance is still in flight — a stale number reads as fact. */}
-        <p className="mono-data text-[0.95rem] text-ink tabular-nums leading-none">{value ?? "—"}</p>
+        {/* A dash, never a zero, while a balance is still in flight — a stale number reads as fact.
+            And four decimals rather than the chain's raw float: 198.349284699998 is data being
+            forwarded, not a balance being presented, and it sat here beside the shell's own tidy
+            copy of the same figure. */}
+        <p className="mono-data text-[0.95rem] text-ink tabular-nums leading-none">{fmtAmount(value)}</p>
         {worth && (
           <p className="mono-label text-[0.56rem] text-ink-3 mt-1.5 leading-none tabular-nums">{worth}</p>
         )}

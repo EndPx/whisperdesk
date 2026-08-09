@@ -23,6 +23,10 @@
 --------------------------------------------------------------------------- */
 
 import type { ReactNode } from "react";
+// Reused rather than redrawn, so a token looks the same in the account bar and in the rail below
+// it. These are marks we drew: an official asset logo is someone else's trademark, and a coloured
+// disc keyed to our own palette says which asset and which chain without borrowing one.
+import { TokenMark, type HoldingToken } from "@/components/Holdings";
 
 export interface ShellRoute {
   id: string;
@@ -38,6 +42,8 @@ export interface ShellFigure {
   hint?: string;
   /** Draws the value in the desk's accent — for a figure that is live or at risk. */
   live?: boolean;
+  /** Shows that asset's mark beside the label. Omit for figures that are not a token. */
+  token?: HoldingToken;
 }
 
 function WhisperMark({ className = "" }: { className?: string }) {
@@ -107,6 +113,27 @@ export default function AppShell({
           </nav>
 
           <div className="flex items-center gap-2 shrink-0 ml-auto">
+            {/* Flare's own faucet, not ours. We cannot mint FAssets FXRP — it exists only against
+                XRP locked in FAssets — and C2FLR from the source costs the desk nothing, so
+                pointing at the real thing is both honest and better for the visitor. */}
+            <a
+              href="https://faucet.flare.network/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mono-label text-[0.54rem] text-ink-3 hover:text-ice px-2.5 py-1.5 border border-steel-line-2 hover:border-ice/50 transition-colors duration-200 flex items-center gap-1.5"
+              title="Get C2FLR and FXRP from Flare's own faucet"
+            >
+              Faucet
+              <svg viewBox="0 0 24 24" className="h-2.5 w-2.5" aria-hidden="true" fill="none">
+                <path
+                  d="M14 4h6v6M20 4l-8.5 8.5M18 14v4.5A1.5 1.5 0 0 1 16.5 20h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </a>
             <span className="mono-label text-[0.54rem] text-ink-3 flex items-center gap-1.5 px-2.5 py-1.5 border border-steel-line-2">
               <span className="h-1.5 w-1.5 rounded-full bg-ice" aria-hidden="true" />
               Coston2
@@ -141,7 +168,10 @@ export default function AppShell({
                 className="px-4 sm:px-5 py-2.5 border-r border-steel-line last:border-r-0 min-w-[7.5rem]"
                 title={f.hint}
               >
-                <p className="mono-label text-[0.5rem] text-ink-3 leading-none">{f.label}</p>
+                <p className="mono-label text-[0.5rem] text-ink-3 leading-none flex items-center gap-1.5">
+                  {f.token && <TokenMark token={f.token} className="h-3.5 w-3.5 shrink-0 text-ink" />}
+                  {f.label}
+                </p>
                 <p
                   className={`mono-data text-[0.82rem] mt-1.5 leading-none tabular-nums ${
                     f.live ? "text-ice" : "text-ink"
