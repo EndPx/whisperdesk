@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { PartyCard, BalanceRow, Rail, type PillSpec, type Ring } from "@/components/flow/parts";
 import WalletMode from "@/components/WalletMode";
 import MakerMode from "@/components/MakerMode";
-import DeskEntry from "@/components/DeskEntry";
+import DeskHome from "@/components/DeskHome";
 import RealAssetProof from "@/components/RealAssetProof";
 import AppShell from "@/components/AppShell";
 import { useWalletAccount } from "@/lib/useWalletAccount";
@@ -166,7 +166,7 @@ export default function DemoConsole() {
   // The shell's account band. Read here rather than lifted out of the two modes: each of them owns
   // a rail with far more detail, and duplicating that plumbing upward to fill a header would couple
   // three components for one line of chrome. This is a cheap read of the same public route.
-  const { address } = useWalletAccount();
+  const { address, hasProvider, setAddress } = useWalletAccount();
   const [account, setAccount] = useState<{ fxrp: string | null; c2flr: string | null }>({
     fxrp: null,
     c2flr: null,
@@ -721,22 +721,52 @@ npm run happy-path`}
     </div>
   );
 
-  // Front door. Every hook above has already run, so this early return is safe — and the console
-  // below mounts unchanged once a seat is chosen.
+  // The desk itself, not a door in front of it. This used to be a full-page chooser asking which
+  // seat you wanted before it would show anything — a question no exchange asks, and one that made
+  // the product explain a concept instead of demonstrating it. Now the shell renders immediately,
+  // the book is public, and the wallet gates only what signing requires. Picking an ACTION here is
+  // what selects a flow; the role is a consequence, never a prompt.
   if (!seated) {
     return (
-      <>
-        <DeskEntry
-          onPick={(role) => {
+      <AppShell
+        routes={[{ id: "desk", label: "Desk" }]}
+        active="desk"
+        onNavigate={() => {}}
+        address={address}
+        onDisconnect={
+          address
+            ? async () => {
+                await disconnect();
+                setAddress(null);
+              }
+            : undefined
+        }
+        figures={[
+          { label: "FXRP", value: account.fxrp, hint: "Your FAssets FXRP on Coston2" },
+          { label: "C2FLR", value: account.c2flr, hint: "Gas. Not a position, so it carries no price." },
+          { label: "Network", value: "Coston2 · 114" },
+        ]}
+      >
+        <DeskHome
+          address={address}
+          hasProvider={hasProvider}
+          onConnected={setAddress}
+          onPlaceOrder={() => {
             userPickedModeRef.current = true;
-            setMode(role);
+            setMode("wallet");
+            setSeated(true);
+          }}
+          onFillOrder={() => {
+            userPickedModeRef.current = true;
+            setMode("maker");
             setSeated(true);
           }}
         />
-        {/* Sits at the door, under the seats. It used to answer "but is that a real asset?" for
-            seats that traded a mock; now it simply shows the receipts for the asset they settle. */}
-        <RealAssetProof />
-      </>
+        {/* Under the desk: the receipts for the asset every trade here settles. */}
+        <div className="mt-3">
+          <RealAssetProof />
+        </div>
+      </AppShell>
     );
   }
 
