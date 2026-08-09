@@ -1472,15 +1472,12 @@ export default function MakerMode({
                   The escrow refuses any payment stamped after the deadline, so do not send it now —
                   it could not be released. The taker&apos;s FXRP is refunded and your bond is slashed
                   to compensate them. That is the protection working exactly as designed; it is the
-                  same default path the one-click demo can show on purpose.
+                  same default path the escrow is built to take when a counterparty walks.
                 </p>
-                <button
-                  type="button"
-                  onClick={onSwitchToOneClick}
-                  className="mono-label text-[0.62rem] px-4 py-2 border border-steel-line-2 text-ink-2 hover:text-ink hover:border-ice-deep/60 transition-colors duration-300"
-                >
-                  See a settlement that completes
-                </button>
+                {/* The button here offered "see a settlement that completes" and switched to the
+                    one-click seat — a seat that no longer exists, so it was a dead control on the
+                    one screen where a maker has just lost their bond. Nothing replaces it: the
+                    honest next step is to write another order, and the desk is still above. */}
               </div>
             ) : (
               payMethod === null && (

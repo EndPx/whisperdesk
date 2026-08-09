@@ -172,8 +172,11 @@ export default function DemoConsole() {
     c2flr: null,
   });
 
+  // "one-click" is no longer reachable — the seat was deleted and the buttons back into it went
+  // with it — but the union keeps it because oneClickBody below still compiles against this state.
   const [mode, setMode] = useState<"one-click" | "wallet" | "maker">("wallet");
-  // The desk opens on a seat picker rather than dropping straight into a mode — see DeskEntry.
+  // `seated` is not a seat any more: it is simply whether a trade is open. False shows the desk
+  // (ticket + book), true shows the trade running beneath it. See DeskHome.
   const [seated, setSeated] = useState(false);
   const [walletBusy, setWalletBusy] = useState(false);
   const [makerBusy, setMakerBusy] = useState(false);
@@ -232,8 +235,8 @@ export default function DemoConsole() {
   }, []);
 
   // The wallet-aware default that used to flip a wallet-less visitor into the one-click tab is gone
-  // with that tab. Both remaining seats need a wallet, and DeskEntry already says so on the card
-  // itself rather than silently rerouting someone to a seat they did not choose.
+  // with that tab. Both actions need a wallet, and DeskHome says so on the control itself rather
+  // than silently rerouting someone somewhere they did not choose.
 
   // Keep the in-flight pill glide replaying while a stage is still pending —
   // otherwise a single 1300ms glide would finish long before a real tx does.
@@ -817,12 +820,14 @@ npm run happy-path`}
       />
 
       <div className="mt-3">
-        {mode === "one-click" ? (
-          oneClickBody
-        ) : mode === "wallet" ? (
-          <WalletMode onSwitchToOneClick={() => setMode("one-click")} onBusyChange={setWalletBusy} />
+        {/* No onSwitchToOneClick any more. The one-click seat was deleted from the door because it
+            proved nothing about a counterparty — but both flows still carried buttons back into it,
+            so the seat was gone and its windows were not. Dropping the prop removes them: every one
+            of those buttons renders only when it is supplied. */}
+        {mode === "wallet" ? (
+          <WalletMode onBusyChange={setWalletBusy} />
         ) : (
-          <MakerMode onSwitchToOneClick={() => setMode("one-click")} onBusyChange={setMakerBusy} />
+          <MakerMode onBusyChange={setMakerBusy} />
         )}
       </div>
     </AppShell>
