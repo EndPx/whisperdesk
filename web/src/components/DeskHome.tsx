@@ -39,29 +39,26 @@ function secondsLeft(windowEndsAt: number): number | null {
   return s > 0 ? s : null;
 }
 
-export default function DeskHome({
-  address,
-  hasProvider,
-  onConnected,
-  onPlaceOrder,
+/** The book, on its own, so it can stay on screen while a trade is running.
+ *
+ *  Split out for exactly that reason: losing sight of the book the moment you start trading is what
+ *  made the old screen feel like a wizard — you were somewhere else now, and the desk had gone.
+ *  Here it narrows and stays put.
+ *
+ *  `compact` drops the explanatory empty state, which earns its space on an idle desk and is noise
+ *  beside a running trade. */
+export function OpenOrdersBook({
+  gated,
   onFillOrder,
+  compact = false,
 }: {
-  address: string | null;
-  hasProvider: boolean | null;
-  onConnected: (addr: string) => void;
-  onPlaceOrder: () => void;
+  gated: boolean;
   onFillOrder: () => void;
+  compact?: boolean;
 }) {
-  const [connecting, setConnecting] = useState(false);
-  const [connectError, setConnectError] = useState<string | null>(null);
   const [orders, setOrders] = useState<OpenOrder[]>([]);
-  const [terms, setTerms] = useState<{ minBlockRaw: string; midUsdE18: string } | null>(null);
   const [, forceTick] = useState(0);
 
-  // One second is the resolution a countdown needs to look alive; slower reads as frozen. But it
-  // runs ONLY while there is a countdown to move: an unconditional ticker re-rendered an empty book
-  // once a second forever, which kept the page from ever going idle and burned a phone's battery to
-  // animate nothing.
   const hasCountdown = orders.length > 0;
   useEffect(() => {
     if (!hasCountdown) return;
@@ -69,8 +66,6 @@ export default function DeskHome({
     return () => clearInterval(t);
   }, [hasCountdown]);
 
-  // The book is public and refreshes whether or not a wallet is attached — an empty desk and a desk
-  // you are not allowed to see are different things, and only one of them is honest.
   useEffect(() => {
     let cancelled = false;
     const read = async () => {
@@ -90,6 +85,86 @@ export default function DeskHome({
       clearInterval(t);
     };
   }, []);
+
+  const live = orders.filter((o) => secondsLeft(o.windowEndsAt) !== null);
+
+  return (
+    <section className="panel overflow-hidden flex flex-col">
+      <div className="px-5 py-3.5 border-b border-steel-line flex items-baseline justify-between gap-3">
+        <p className="mono-label text-[0.6rem] text-ice">Open orders</p>
+        <p className="mono-label text-[0.5rem] text-ink-3 tabular-nums">{live.length} quoting now</p>
+      </div>
+
+      <div className="flex-1">
+        {live.length === 0 ? (
+          <div className="px-5 py-8">
+            <p className="mono-data text-[0.8rem] text-ink-3">The book is empty.</p>
+            {!compact && (
+              <p className="mono-label text-[0.54rem] text-ink-3 mt-2 leading-relaxed max-w-[44ch]">
+                Orders appear here the moment anyone writes one, in this browser or another. Write
+                one yourself and it shows on every other desk within five seconds.
+              </p>
+            )}
+          </div>
+        ) : (
+          <ul>
+            {live.map((o) => {
+              const left = secondsLeft(o.windowEndsAt);
+              return (
+                <li
+                  key={o.rfqId}
+                  className="px-5 py-3.5 border-b border-steel-line last:border-b-0 flex items-center gap-4"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="mono-data text-[0.78rem] text-ink truncate">{short(o.rfqId)}</p>
+                    {/* Deliberately nothing else. Size, limit, side and author stay inside the
+                        enclave — a book that showed them would be an order book, not a dark one. */}
+                    <p className="mono-label text-[0.5rem] text-ink-3 mt-1.5">
+                      sealed · you price it blind
+                    </p>
+                  </div>
+                  <p className="mono-data text-[0.72rem] text-ice tabular-nums shrink-0">
+                    {left !== null
+                      ? `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`
+                      : "—"}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={onFillOrder}
+                    disabled={gated}
+                    className="mono-label text-[0.58rem] px-3.5 py-2 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 shrink-0 disabled:opacity-30 disabled:pointer-events-none"
+                  >
+                    Quote it
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </section>
+  );
+}
+
+export default function DeskHome({
+  address,
+  hasProvider,
+  onConnected,
+  onPlaceOrder,
+  onFillOrder,
+}: {
+  address: string | null;
+  hasProvider: boolean | null;
+  onConnected: (addr: string) => void;
+  onPlaceOrder: () => void;
+  onFillOrder: () => void;
+}) {
+  const [connecting, setConnecting] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
+  const [terms, setTerms] = useState<{ minBlockRaw: string; midUsdE18: string } | null>(null);
+
+  // The book's own state moved into OpenOrdersBook — it is the same component the running trade
+  // keeps beside it, so there is one implementation of the book rather than two that can drift.
 
   useEffect(() => {
     let cancelled = false;
@@ -130,7 +205,6 @@ export default function DeskHome({
     }
   }, [onConnected]);
 
-  const live = orders.filter((o) => secondsLeft(o.windowEndsAt) !== null);
   const gated = !address;
 
   return (
@@ -183,71 +257,8 @@ export default function DeskHome({
         </div>
       </section>
 
-      {/* --- Book: quote somebody else's -------------------------------------------------- */}
-      <section className="panel overflow-hidden flex flex-col">
-        <div className="px-5 py-3.5 border-b border-steel-line flex items-baseline justify-between gap-3">
-          <p className="mono-label text-[0.6rem] text-ice">Open orders</p>
-          <p className="mono-label text-[0.5rem] text-ink-3 tabular-nums">{live.length} quoting now</p>
-        </div>
-
-        <div className="flex-1">
-          {live.length === 0 ? (
-            <div className="px-5 py-8">
-              <p className="mono-data text-[0.8rem] text-ink-3">The book is empty.</p>
-              <p className="mono-label text-[0.54rem] text-ink-3 mt-2 leading-relaxed max-w-[44ch]">
-                Orders appear here the moment anyone writes one, in this browser or another. Write
-                one yourself and it shows on every other desk within five seconds.
-              </p>
-            </div>
-          ) : (
-            <ul>
-              {live.map((o) => {
-                const left = secondsLeft(o.windowEndsAt);
-                return (
-                  <li
-                    key={o.rfqId}
-                    className="px-5 py-3.5 border-b border-steel-line last:border-b-0 flex items-center gap-4"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="mono-data text-[0.78rem] text-ink truncate">{short(o.rfqId)}</p>
-                      {/* Deliberately nothing else. Size, limit, side and author stay inside the
-                          enclave — a book that showed them would be an order book, not a dark one. */}
-                      <p className="mono-label text-[0.5rem] text-ink-3 mt-1.5">
-                        sealed · you price it blind
-                      </p>
-                    </div>
-                    <p className="mono-data text-[0.72rem] text-ice tabular-nums shrink-0">
-                      {left !== null
-                        ? `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`
-                        : "—"}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={onFillOrder}
-                      disabled={gated}
-                      className="mono-label text-[0.58rem] px-3.5 py-2 border border-ice/50 text-ice hover:bg-ice/10 transition-colors duration-300 shrink-0 disabled:opacity-30 disabled:pointer-events-none"
-                    >
-                      Quote it
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-
-        {gated && live.length > 0 && (
-          <div className="px-5 py-4 border-t border-steel-line">
-            <WalletGate
-              hasProvider={hasProvider}
-              connecting={connecting}
-              error={connectError}
-              onConnect={handleConnect}
-              what="to quote an order"
-            />
-          </div>
-        )}
-      </section>
+      {/* The same component the running trade keeps beside it — one book, not two that drift. */}
+      <OpenOrdersBook gated={gated} onFillOrder={onFillOrder} />
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { PartyCard, BalanceRow, Rail, type PillSpec, type Ring } from "@/components/flow/parts";
 import WalletMode from "@/components/WalletMode";
 import MakerMode from "@/components/MakerMode";
-import DeskHome from "@/components/DeskHome";
+import DeskHome, { OpenOrdersBook } from "@/components/DeskHome";
 import RealAssetProof from "@/components/RealAssetProof";
 import AppShell from "@/components/AppShell";
 import { useWalletAccount } from "@/lib/useWalletAccount";
@@ -800,13 +800,32 @@ npm run happy-path`}
         { label: "Network", value: "Coston2 · 114" },
       ]}
     >
-      {mode === "one-click" ? (
-        oneClickBody
-      ) : mode === "wallet" ? (
-        <WalletMode onSwitchToOneClick={() => setMode("one-click")} onBusyChange={setWalletBusy} />
-      ) : (
-        <MakerMode onSwitchToOneClick={() => setMode("one-click")} onBusyChange={setMakerBusy} />
-      )}
+      {/* The trade runs beside the book, never instead of it. Replacing the whole screen the moment
+          you act is what made this read as a wizard: you were somewhere else now, and the desk had
+          gone. Keeping the book mounted means other people's orders keep arriving in front of you
+          while your own trade settles — which is what a desk looks like, and is also the thing this
+          product is claiming. */}
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_20rem] gap-3 items-start">
+        <div className="min-w-0">
+          {mode === "one-click" ? (
+            oneClickBody
+          ) : mode === "wallet" ? (
+            <WalletMode onSwitchToOneClick={() => setMode("one-click")} onBusyChange={setWalletBusy} />
+          ) : (
+            <MakerMode onSwitchToOneClick={() => setMode("one-click")} onBusyChange={setMakerBusy} />
+          )}
+        </div>
+
+        <OpenOrdersBook
+          gated={!address}
+          compact
+          onFillOrder={() => {
+            if (switcherDisabled) return; // mid-settlement; leaving would strand an open match
+            userPickedModeRef.current = true;
+            setMode("maker");
+          }}
+        />
+      </div>
     </AppShell>
   );
 }
