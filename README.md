@@ -34,20 +34,27 @@ This is a hackathon prototype, and these are its scope boundaries, not apologies
   at `PRODUCTION` status, and our own registry-enforced instruction sender. What simulated mode does
   cost us is a hardware attestation and a persistent identity — the enclave's key regenerates on
   every restart by design, which is why `scripts/enclave-loop/monitor.mjs` watches for exactly that.
-- **Two RFQ ingresses exist. The onchain one is the design; the live site is on the other one
-  today.** `WhisperDeskInstructionSender.submitRfq` is the registry-enforced instruction sender for
-  our extension and stamps the taker from `msg.sender`, so the identity cannot be forged — a full
-  settlement has run through it end to end (receipts below), and it is still what the contract
-  does. It reaches the enclave through Flare's hosted FTDC proxy, and that proxy now answers our
-  machine-availability check with a 404, so nothing routes that way at the moment. Everything on
-  the website therefore goes over `POST /direct` (API-keyed, `WD_ALLOW_DIRECT_RFQ=true`), where the
-  taker in the envelope is **self-attested** rather than stamped. Be precise about what that costs:
-  it costs attribution, not safety. `lock()` reserves the FXRP from the named taker's *own* armed
-  escrow deposit and pays the XRP to the address sealed beside it, so naming someone else either
-  settles the trade to them or cannot lock at all — a forged taker cannot be made to profit the
-  forger. What is genuinely lost is the chain proving *who wrote the order*. The match trigger
-  moved to `/direct` too and loses nothing at all: `RFQ_MATCH` is permissionless on both ingresses,
-  carries no secret, and names no party.
+- **The taker's identity is stamped by the contract, not claimed.**
+  `WhisperDeskInstructionSender.submitRfq` is the registry-enforced instruction sender for our
+  extension, and it writes the taker into the instruction from `msg.sender`. The desk seals your
+  order and hands the ciphertext back; the transaction goes out from your own wallet, so nobody —
+  this server included — can publish an order in your name.
+
+  That path was broken for a stretch and we blamed the wrong party, which is worth recording because
+  the diagnosis is the useful part. Every onchain submission 404'd, we attributed it to Flare's
+  hosted FTDC proxy, and RFQ submission moved to `POST /direct` with a self-attested taker. The real
+  cause was ours: our TEE machine was registered on-chain under `http://localhost:6674`. Flare's
+  data providers push to the URL recorded on-chain, so they were pushing at a loopback address that
+  meant nothing to them, and the availability check could never complete. `updateTeeMachineSettings`
+  fixed it — no re-registration, no new extension id, no key rotation — the machine reached
+  `PRODUCTION`, and an onchain `submitRfq` returned an enclave ack on the first try. If you are
+  stuck on the same 404: read `getTeeMachine(<teeId>)` and check the URL is one the outside world
+  can reach. `register-tee` will not update it for an already-registered machine, whatever flags you
+  pass — `Register()` is the only writer and it is skipped.
+
+  `RFQ_MATCH` stays on `POST /direct` deliberately. It is permissionless on either ingress, carries
+  no secret (the `rfqId` is already public) and names no party, so putting it onchain would add a
+  transaction, a fee and a wait to a call anyone is allowed to make.
 - **Every trade you can run here is 1 FXRP, not an institutional block.** The desk's canonical
   policy is a 5,000 FXRP minimum block (`MIN_BLOCK_FXRP`); the deployed integration
   instance (`contracts/script/DeployIntegration.s.sol`) sets it to `1e6` (1 FXRP) instead, because a
@@ -275,13 +282,11 @@ checks the registry/instruction binding live), `cd contracts && forge test` (the
 and the explorer receipts linked throughout this README.
 
 Scope note: the receipts in *this* table came in over `POST /direct` with `WD_ALLOW_DIRECT_RFQ=true`,
-where the taker identity in the envelope is self-attested. That is the ingress the whole website
-runs on today. The chain-authenticated ingress — `WhisperDeskInstructionSender.submitRfq`, which
-stamps the taker from `msg.sender` — is deployed, registry-enforced, and has settled end to end;
-its receipts are in the next section. It is not reachable right now: Flare's hosted FTDC proxy
-answers our machine-availability check with a 404, so instructions submitted that way never arrive.
-That is a routing failure outside our contracts, and it is why the live seats moved to `/direct`
-rather than sit broken.
+where the taker identity in the envelope is self-attested. That was true of these runs and is no
+longer how the site submits orders: RFQ submission goes through
+`WhisperDeskInstructionSender.submitRfq` from the taker's own wallet, so the taker is stamped from
+`msg.sender` rather than claimed. The `/direct` ingress is still gated on for `RFQ_MATCH`, where it
+gives nothing away — that call is permissionless either way, carries no secret, and names no party.
 Everything downstream of either ingress is identical: sealing, in-enclave matching, EIP-712 maker
 auth, enclave signing, and the onchain `ecrecover` check. The enclave runs in simulated-TEE mode
 (`magic_pass`), and its identity key regenerates on every restart by design — which is exactly
@@ -403,7 +408,7 @@ custody.
 
 What it would take to make this real, in order:
 
-1. Get the onchain ingress routing again — the contract half is built, registry-enforced and proven; what is missing is a TEE machine registration Flare's hosted proxy will accept. Until then the live site's taker is self-attested.
+1. ~~Onchain `submitRfq` ingress~~ — done: the taker is stamped from `msg.sender` again, after our own TEE machine registration was corrected from a loopback URL.
 2. ~~Real FAssets FXRP~~ — done: both escrows settle the FAssets asset directly.
 3. Persistent TEE identity + real attestation — replace `magic_pass` with genuine remote attestation and a key that survives restarts.
 4. Maker onboarding — let more than one maker register into the sealed book, not just the demo pair.

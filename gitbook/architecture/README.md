@@ -21,16 +21,19 @@ two RFQ ingresses below, then watches the escrow's onchain state.
 Both feed the same enclave, the same matching, and the same escrow logic downstream — the
 difference is only how the taker's identity gets asserted going in.
 
-The onchain ingress reaches the enclave through Flare's hosted FTDC proxy, and that proxy currently
-answers our machine-availability check with a 404, so instructions sent that way never arrive. The
-contract half is built and proven; the routing half is not ours. Rather than leave the live seats
-broken, both `RFQ_SUBMIT` and `RFQ_MATCH` go over `/direct` today.
+`RFQ_SUBMIT` goes onchain — that is where the taker's identity comes from. `RFQ_MATCH` goes over
+`/direct`, where nothing is given away: it is permissionless on either ingress, carries no secret,
+and names no party, so onchain would only add a transaction, a fee and a wait to a call anyone may
+make.
 
-Be exact about the cost, because it differs by command. `RFQ_MATCH` loses nothing — permissionless
-on either ingress, carries no secret, names no party. `RFQ_SUBMIT` loses the `msg.sender` stamp,
-which costs **attribution, not safety**: `lock()` reserves the FXRP from the named taker's own armed
-deposit and pays the XRP to the address sealed beside it, so naming someone else either settles the
-trade to them or cannot lock at all. What is lost is the chain proving who authored the order.
+Both briefly ran over `/direct` after every onchain submission started 404ing. We attributed that to
+Flare's hosted FTDC proxy; it was our own TEE machine, registered on-chain under
+`http://localhost:6674`. Flare's data providers push to the URL recorded on-chain, so they were
+pushing at a loopback address that meant nothing to them. `updateTeeMachineSettings` corrected it —
+no re-registration, no new extension id, no key rotation — and the machine reached `PRODUCTION`.
+Worth knowing if you hit the same wall: `register-tee` will not update that URL for a machine that
+is already registered, whatever flags you pass, because `Register()` is its only writer and it is
+skipped.
 
 ## 3. FCC enclave
 

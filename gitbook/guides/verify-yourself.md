@@ -37,13 +37,24 @@ checks that the message is `abi.encode(<the transaction's own sender>, <ECIES ci
 the taker address was stamped by `WhisperDeskInstructionSender` from `msg.sender`, not supplied by
 the client. A caller cannot claim to be a different taker through this path.
 
-**What it does not prove:** that the path is carrying traffic today. It is not. Onchain instructions
-reach the enclave through Flare's hosted FTDC proxy, which currently answers our machine-availability
-check with a 404, so the live site submits over `POST /direct` with a self-attested taker instead.
-The binding this script checks is real and still in the contract; the routing in front of it is
-down. What keeps a self-attested taker honest meanwhile is the escrow rather than the ingress —
-`lock()` reserves the FXRP from the named taker's own armed deposit and pays the XRP to the address
-sealed beside it.
+**And it is the path the live site uses.** Orders are sealed by the desk, then submitted from the
+taker's own wallet, so every one of them carries this stamp.
+
+That was briefly untrue. Onchain submissions all returned 404 and the site fell back to `POST
+/direct` with a self-attested taker. We blamed Flare's hosted FTDC proxy; the fault was ours — our
+TEE machine was registered on-chain under `http://localhost:6674`, and Flare's data providers push
+to the URL recorded on-chain, so they were pushing at a loopback address. Two read-only calls tell
+you whether you have the same problem:
+
+```bash
+cast call 0x1a9C4A0f9D76c0b1D91d22E24E573a9b377618aE "getTeeMachine(address)((address,address,string))" <teeId>
+cast call 0x1a9C4A0f9D76c0b1D91d22E24E573a9b377618aE "getTeeMachineStatus(address)(uint8)" <teeId>
+```
+
+The first must return a URL the outside world can reach; the second must be `2` (`PRODUCTION`). If
+the URL is wrong, `updateTeeMachineSettings` is the fix — `register-tee` will not change it for an
+already-registered machine whatever flags you pass, because `Register()` is its only writer and it
+gets skipped.
 
 ## 3. Contract suite — do the settlement rules hold?
 

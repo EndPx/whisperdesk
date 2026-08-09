@@ -122,18 +122,23 @@ goes over `/direct` because quotes are private maker data and never touch the ch
 | `release()` — maker received 1.0 FXRP | https://coston2-explorer.flare.network/tx/0xcd660e692e9445f458ca99f285b2d405ffe702585bb4c5d90125c0b4c2811573 |
 
 > **Scope note.** The receipts in this table came in over `POST /direct`
-> (`WD_ALLOW_DIRECT_RFQ=true`), where the taker identity in the envelope is self-attested. That is
-> the ingress the whole website runs on today. The chain-authenticated ingress
-> (`WhisperDeskInstructionSender.submitRfq`, table above) is the real design: deployed,
-> registry-enforced, and settled end to end. It is not reachable right now — Flare's hosted FTDC
-> proxy answers our machine-availability check with a 404, so instructions submitted that way never
-> arrive. That is a routing failure outside our contracts.
+> (`WD_ALLOW_DIRECT_RFQ=true`), where the taker identity in the envelope is self-attested. That was
+> true of these runs and is no longer how the site submits orders: RFQ submission goes through
+> `WhisperDeskInstructionSender.submitRfq` from the taker's own wallet, so the taker is stamped from
+> `msg.sender` rather than claimed.
 >
-> The cost of being on `/direct` is **attribution, not safety**: `lock()` reserves the FXRP from the
-> named taker's own armed deposit and pays the XRP to the address sealed beside it, so naming
-> someone else either settles the trade to them or cannot lock at all. Everything downstream of
-> either ingress is identical — sealing, in-enclave matching, EIP-712 maker auth, enclave signing,
-> and the onchain `ecrecover` check.
+> That path was down for a stretch and we blamed the wrong party. Every onchain submission 404'd and
+> we attributed it to Flare's hosted FTDC proxy; the cause was our own TEE machine, registered
+> on-chain under `http://localhost:6674`. Flare's data providers push to the URL recorded on-chain,
+> so they were pushing at a loopback address that meant nothing to them.
+> `updateTeeMachineSettings` corrected it and the machine reached `PRODUCTION` — note that
+> `register-tee` will not update that URL for an already-registered machine, whatever flags you
+> pass, because `Register()` is its only writer and it is skipped.
+>
+> `/direct` is still used for `RFQ_MATCH`, where it gives nothing away: that call is permissionless
+> on either ingress, carries no secret, and names no party. Everything downstream of either ingress
+> is identical — sealing, in-enclave matching, EIP-712 maker auth, enclave signing, and the onchain
+> `ecrecover` check.
 
 ---
 
