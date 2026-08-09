@@ -17,6 +17,38 @@ https://fce.endpx.cloud/info
 
 ![WhisperDesk architecture — seal, match blind, settle or slash](assets/architecture.svg)
 
+## What runs in the TEE, and why it has to
+
+Four questions, answered directly.
+
+**What runs privately inside the enclave.** The order book, and the decision. RFQs and quotes arrive
+ECIES-sealed and are decrypted only inside; the enclave verifies each maker's EIP-712 quote
+signature, holds the sealed book, runs the matcher — six filters, then best price with ties broken by
+arrival order — and signs the resulting `MatchInstruction` with a key that never leaves it. Side,
+size, limit and counterparty never exist in plaintext anywhere else.
+
+**What the chain verifies and consumes.** The enclave's signature is not trusted on its word:
+`lock()` runs `ecrecover` and refuses anything not signed by the escrow's configured signer. It then
+re-reads the FTSOv2 XRP/USD mid itself and rejects a price more than ±1% away — so a lying enclave
+still cannot push a bad price through — and derives the XRP drops on-chain from that oracle, which
+is why the enclave never signs a drops figure at all. Release consumes an FDC `XRPPayment`
+attestation; refund slashes the maker's bond. Every one of those calls is permissionless.
+
+**Trust assumptions, without softening.** The enclave runs in simulated-TEE mode
+(`SIMULATED_TEE=true`, attestation `magic_pass`), so there is no hardware attestation — you are
+trusting our deployment, not silicon. Its identity key regenerates on every restart by design, which
+is why a monitor watches for exactly that drift. There is one enclave and we operate it. The escrow
+owner can call `setLockPaused`. What that trust does *not* extend to: the price band, the drops
+arithmetic, the payment proof and the bond slash are all enforced on-chain, so the enclave's power
+is limited to choosing *who matches whom*, inside bounds it cannot move.
+
+**Why this cannot be a normal smart contract.** Because anything on-chain is public. A sealed-bid
+market whose bids sit in contract storage is not sealed — competitors read the order, and the venue
+reads it first. The enclave exists to make one specific thing true: nobody, including us, can see an
+order before it is matched. And it buys a second property a public venue structurally cannot offer —
+a losing quote is recorded nowhere, not even the fact that it existed, because the taker is never
+shown a list to choose from. Venues that let the taker pick must disclose every loser.
+
 ## What is and isn't real here
 
 This is a hackathon prototype, and these are its scope boundaries, not apologies:
