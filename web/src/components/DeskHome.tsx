@@ -58,11 +58,16 @@ export default function DeskHome({
   const [terms, setTerms] = useState<{ minBlockRaw: string; midUsdE18: string } | null>(null);
   const [, forceTick] = useState(0);
 
-  // One second is the resolution a countdown needs to look alive; slower reads as frozen.
+  // One second is the resolution a countdown needs to look alive; slower reads as frozen. But it
+  // runs ONLY while there is a countdown to move: an unconditional ticker re-rendered an empty book
+  // once a second forever, which kept the page from ever going idle and burned a phone's battery to
+  // animate nothing.
+  const hasCountdown = orders.length > 0;
   useEffect(() => {
+    if (!hasCountdown) return;
     const t = setInterval(() => forceTick((n) => n + 1), 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [hasCountdown]);
 
   // The book is public and refreshes whether or not a wallet is attached — an empty desk and a desk
   // you are not allowed to see are different things, and only one of them is honest.

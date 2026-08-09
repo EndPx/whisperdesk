@@ -54,8 +54,11 @@ export default function RealAssetProof() {
     <div className="panel px-5 py-3.5 mt-4 flex flex-wrap items-center gap-x-5 gap-y-2">
       <p className="mono-label text-[0.56rem] text-ice shrink-0">Settles the real asset</p>
 
-      <p className="mono-label text-[0.52rem] text-ink-3 leading-snug flex-1 min-w-[24ch]">
-        Every seat here settles{" "}
+      {/* basis, not just a min-width: with the receipts sharing this row the paragraph was the only
+          flexible child, so it collapsed to its 24ch floor and read as a narrow gutter of text. A
+          real basis keeps a readable measure and lets the receipts wrap below instead. */}
+      <p className="mono-label text-[0.52rem] text-ink-3 leading-snug flex-1 basis-[34ch] min-w-[28ch]">
+        Every trade here settles{" "}
         <a href={FXRP_TOKEN} target="_blank" rel="noopener noreferrer" className="text-ice hover:underline">
           genuine FAssets FXRP
         </a>{" "}
