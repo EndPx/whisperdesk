@@ -162,19 +162,21 @@ whoever wrote it.
 
 | Stage | Receipt |
 |---|---|
-| Taker, created during the run | [`0x6e6F7743…77AA`](https://coston2-explorer.flare.network/address/0x6e6F7743A94E7748cb195E836f04c1599eF277AA) |
+| Taker, created during the run | [`0x45712Bef…E723`](https://coston2-explorer.flare.network/address/0x45712Bef9D6a85A2C0Ef1423Cc3d853093cbE723) |
 | Maker, a different key | [`0x35AC3BE4…CE3C`](https://coston2-explorer.flare.network/address/0x35AC3BE4d8D3841f394564983Ed7b3fC3666CE3C) |
-| Taker's own `deposit()` | https://coston2-explorer.flare.network/tx/0x893978e65bb7fe3004721d3699c30ee6cd27d0130663a9c8c9353738a2907c51 |
-| The order the taker chose | 1.0 FXRP, limit 1.030323 USD (ceiling that run: 1.045856) |
-| Sealed RFQ published, `rfqId` = `matchId` | `0x755f5b90…2abb` |
-| Maker's blind quote, above that limit | 1.035118 USD/XRP → `MATCHED` |
-| XRPL payment — maker → the taker's own account | https://testnet.xrpl.org/transactions/36FFAA9A105019D7B63A08591F6E1AB0A0B5C434FBDF9D86F6BB85E9BE38F323 |
-| `release()` — maker received 1.0 FXRP | https://coston2-explorer.flare.network/tx/0x2da3adc27e340f49ecec8f8023bdb85c899cb292256e5a4eddfae412c796fed0 |
+| Taker's own `deposit()` | https://coston2-explorer.flare.network/tx/0x2d36d799668dbe9c80ca847e730019e379922c97f7bed4fcd67652df80ec173a |
+| **`submitRfq()` from the taker's own wallet** — the contract stamped the taker | https://coston2-explorer.flare.network/tx/0xd92a2307d203642ea0fbfed7945ebb8764e94df0811b8e07b3a286a769c55c1f |
+| The order the taker chose | 1.0 FXRP, limit 1.032557 USD (ceiling that run: 1.047796) |
+| `rfqId` = `matchId`, acked by the enclave | `0x0688f34b…1dfe` |
+| Maker's blind quote, above that limit | 1.037674 USD/XRP → `MATCHED` |
+| XRPL payment — maker → the taker's own account | https://testnet.xrpl.org/transactions/60E7157C768D3144AAFABB428A48F69D9701413CD231C66934BF577B7DD78BEF |
+| `release()` — maker received 1.0 FXRP | https://coston2-explorer.flare.network/tx/0x6cb58550ebefec69f2e8ab5b2070d27663e19cb8c6b65e6023f075ae90ed0d36 |
 
-The script checks the chain as it goes, and those checks passed: `matches().taker` ==
-`0x6e6F7743…`, `matches().maker` == `0x35AC3BE4…`, and the escrow's XRP destination == the taker's
-own XRPL account. Balances after: maker FXRP 4.8 → 5.8, taker XRP 100.999768 on an account that was
-empty minutes earlier.
+The script checks the chain as it goes, and those checks passed: the `SealedRfqSubmitted` event
+named `0x45712Bef…` as taker — written by the contract from `msg.sender`, not supplied by anyone —
+`matches().taker` == `0x45712Bef…`, `matches().maker` == `0x35AC3BE4…`, and the escrow's XRP
+destination == the taker's own XRPL account. Balances after: maker FXRP 7.8 → 8.8, taker XRP
+101.000002 on an account that was empty minutes earlier.
 
 The bounds are enforced, not decorative — checked live against the deployed API. A size below the
 block minimum, a limit above the band, and a zero limit are each refused with the reason:
