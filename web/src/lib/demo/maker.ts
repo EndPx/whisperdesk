@@ -22,54 +22,39 @@
 //     request body, same invariant as wallet-mode.ts's prepareStore.
 import { ethers } from "ethers";
 import { Client } from "xrpl";
-import { XRPL_TESTNET_WSS } from "./config";
+import { COSTON2_CHAIN_ID, XRPL_TESTNET_WSS } from "./config";
 import { dataHash, ethSignedDigest } from "./matchInstruction";
 import { type DemoClients, fundTakerDeposit, readLiveFtsoMid, setupClients } from "./flow";
 import { type MakerEnv } from "./makerEnv";
-import { wdEncrypt, wdSubmitQuote, wdSubmitRfq, wdTriggerMatch } from "./wdClient";
+import { wdEncrypt, wdSubmitQuote, wdTriggerMatch } from "./wdClient";
 import { generateAndFundXrplAccount, type FreshXrplAccount } from "./wallet-mode";
 import { payXrpl } from "./xrplPay";
 
 // ---------------------------------------------------------------------------------------------
-// Ingress: /direct, for both RFQ_SUBMIT and RFQ_MATCH.
+// Ingress: RFQ_SUBMIT onchain, RFQ_MATCH over /direct. The split is deliberate and the reason is
+// not the same on both sides.
 //
-// The canonical ingress is onchain — WhisperDeskInstructionSender.submitRfq/triggerMatch, proven end
-// to end on 25 Jul with receipts in .claude/context/deployments.md. It routes instructions to the
-// enclave through Flare's hosted FTDC proxy, and that proxy currently answers the machine-
-// availability check with a 404, so nothing reaches the enclave that way today. The failure is on
-// the routing side, not in our contracts, and it takes both live seats down with it.
+// RFQ_SUBMIT is onchain because that is where the taker's identity comes from:
+// WhisperDeskInstructionSender writes it into the envelope from msg.sender, so it cannot be
+// claimed. Both commands briefly ran over /direct after every onchain submission started 404ing —
+// which we attributed to Flare's proxy and which was in fact our own TEE machine registered under
+// `http://localhost:6674`. Flare's data providers push to the URL recorded on-chain, so they were
+// pushing into a loopback address that meant nothing to them. updateTeeMachineSettings corrected
+// it, the machine reached PRODUCTION, and an onchain submitRfq now returns an enclave ack
+// (tx 0xe57cb5ff…128e, status 1). The self-attested taker is gone with it.
 //
-// So both commands go over POST /direct instead. What that costs is NOT symmetric, and the
-// difference is the whole reason this comment exists:
-//   - RFQ_MATCH costs nothing. It is permissionless on either ingress, carries no secret (the rfqId
-//     is public), and names no party. Same matcher, same sealed book, whoever fires it.
-//   - RFQ_SUBMIT costs the sender binding. Onchain, the contract stamps the taker from msg.sender;
-//     here the sender rides in the envelope and is self-attested. See publishTakerRfq for what that
-//     does and does not let someone get away with.
+// RFQ_MATCH stays on /direct because moving it there cost nothing: it is permissionless on either
+// ingress, carries no secret (the rfqId is already public), and names no party. Onchain it would
+// only add a transaction, a fee and a wait to a call anyone is allowed to make.
+//
+// WhisperDeskInstructionSender — minimal ABI (contracts/src/WhisperDeskInstructionSender.sol). Not
+// added to abi.ts (a verbatim DvPEscrow port kept in sync elsewhere) since this is a different
+// contract, needed only here.
 // ---------------------------------------------------------------------------------------------
-
-/// abi.encode(address sender, bytes ciphertext) — the exact envelope fcewire's decodeRfqEnvelope
-/// unpacks, and the same one WhisperDeskInstructionSender writes onchain from msg.sender. Building
-/// it here rather than in the contract is precisely the delta this ingress introduces.
-function encodeRfqEnvelope(sender: string, ciphertextHex: string): string {
-  return ethers.AbiCoder.defaultAbiCoder().encode(["address", "bytes"], [sender, ciphertextHex]);
-}
-
-/// Seals `rfqPlaintext`, submits it over /direct as `sender`, and returns the enclave's ack.
-/// `sender` MUST equal the plaintext's `taker` — the enclave rejects a mismatch WD_ERR_AUTH.
-async function submitSealedRfq(
-  env: MakerEnv,
-  sender: string,
-  rfqPlaintext: Record<string, unknown>
-): Promise<RfqAck> {
-  const ciphertext = await wdEncrypt(env, rfqPlaintext);
-  const actionId = await wdSubmitRfq(env, encodeRfqEnvelope(sender, ciphertext));
-  const result = await pollActionResult(env.extProxyUrl, actionId, { tag: "submit", timeoutMs: 60_000 });
-  if (result.status !== 1) {
-    throw new Error(`RFQ_SUBMIT failed: status=${result.status} log=${JSON.stringify(result.log)}`);
-  }
-  return decodeActionPayload<RfqAck>(result);
-}
+const SENDER_ABI = [
+  "function submitRfq(bytes calldata ciphertext) external payable returns (bytes32)",
+  "event SealedRfqSubmitted(bytes32 indexed instructionId, address indexed taker)",
+];
 
 // ---------------------------------------------------------------------------------------------
 // Deadline knobs — mirrors wallet-mode.ts's WALLET_MODE_DEADLINE_SECONDS reasoning: no contract-
@@ -309,9 +294,40 @@ export async function buildOpenRfq(env: MakerEnv): Promise<OpenRfqResult> {
   };
 
   // The desk seals an RFQ naming ITSELF as taker, so a maker who arrives alone still has a real
-  // counterparty to quote against. Self-attestation is vacuous here: the desk is attesting to being
-  // itself, from its own server, with its own deposit already funded above.
-  const ack = await submitSealedRfq(env, takerWallet.address, rfqPlaintext);
+  // counterparty to quote against — and sends it from its own wallet through the same onchain
+  // ingress a visitor uses, so this order carries the identical msg.sender stamp rather than a
+  // weaker server-side shortcut.
+  const ciphertext = await wdEncrypt(env, rfqPlaintext);
+  const sender = new ethers.Contract(env.senderAddress, SENDER_ABI, takerWallet);
+  const tx = await sender.submitRfq(ciphertext, { value: env.relayFeeWei });
+  const receipt = await tx.wait();
+
+  const sealedEvent = receipt.logs
+    .map((l: ethers.Log) => {
+      try {
+        return sender.interface.parseLog(l);
+      } catch {
+        return null;
+      }
+    })
+    .find(
+      (e: ethers.LogDescription | null): e is ethers.LogDescription =>
+        e !== null && e.name === "SealedRfqSubmitted"
+    );
+  if (!sealedEvent) {
+    throw new Error("maker/open-rfq: SealedRfqSubmitted not found in the submitRfq receipt");
+  }
+  if ((sealedEvent.args.taker as string).toLowerCase() !== takerWallet.address.toLowerCase()) {
+    throw new Error("maker/open-rfq: stamped taker != desk wallet — sender binding broken");
+  }
+
+  const result = await pollActionResult(env.extProxyUrl, sealedEvent.args.instructionId as string, {
+    timeoutMs: 120_000,
+  });
+  if (result.status !== 1) {
+    throw new Error(`maker/open-rfq: RFQ_SUBMIT failed: status=${result.status} log=${JSON.stringify(result.log)}`);
+  }
+  const ack = decodeActionPayload<RfqAck>(result);
 
   putRfqRecord(ack.rfqId, ack.windowEndsAt);
 
@@ -385,13 +401,13 @@ export async function buildTakerRfqTerms(env: MakerEnv): Promise<TakerRfqTerms> 
  *  produces an RFQ that can never lock; naming someone who has, settles the trade to THEM. A forged
  *  taker cannot be made to profit the forger. What is genuinely lost is attribution: the chain no
  *  longer proves who authored the order, only that whoever it names had funds behind it. */
-export async function publishTakerRfq(
+export async function sealTakerRfq(
   env: MakerEnv,
   takerAddress: string,
   xrplAddress: string,
   fxrpAmountRaw: bigint,
   limitPriceUsdE18: bigint
-): Promise<{ rfqId: string; windowEndsAt: number }> {
+): Promise<{ ciphertext: string; senderAddress: string; relayFeeWei: string }> {
   const clients: DemoClients = await setupClients(env, { requireOwnerIsTeeSigner: false });
   const { escrow, ftso } = clients;
 
@@ -416,9 +432,9 @@ export async function publishTakerRfq(
     );
   }
 
-  // The desk's own hand appears nowhere in this payload any more. Side is the only field still
-  // fixed, and only because the escrow itself implements exactly one direction.
-  const ack = await submitSealedRfq(env, takerAddress, {
+  // The desk's own hand appears nowhere in this payload. Side is the only field still fixed, and
+  // only because the escrow itself implements exactly one direction.
+  const ciphertext = await wdEncrypt(env, {
     v: 1,
     taker: takerAddress,
     side: "SELL_FXRP",
@@ -426,6 +442,57 @@ export async function publishTakerRfq(
     limitPriceUsdE18: limitPriceUsdE18.toString(),
     xrplAddress,
   });
+
+  // Returned, not submitted. submitRfq must come from the taker's own wallet: the contract writes
+  // the taker into the envelope from msg.sender, and that stamp is the entire reason a taker's
+  // identity cannot be claimed. Relaying it from a desk key would hand back the property the
+  // onchain ingress exists to provide.
+  return {
+    ciphertext,
+    senderAddress: env.senderAddress,
+    relayFeeWei: env.relayFeeWei.toString(),
+  };
+}
+
+/** Reads back the taker's own submitRfq receipt, waits for the enclave to ack it, and publishes the
+ *  resulting rfqId into the shared book so other desks can quote it.
+ *
+ *  The taker stamped in SealedRfqSubmitted is checked against the address claiming to have sent it.
+ *  That check is not ceremony: it is the difference between "this order is yours" and "you told us
+ *  it was". Polled WITHOUT a submissionTag, because an onchain instruction lands on the default
+ *  queue rather than the direct one. */
+export async function confirmTakerRfq(
+  env: MakerEnv,
+  txHash: string,
+  takerAddress: string
+): Promise<{ rfqId: string; windowEndsAt: number }> {
+  const provider = new ethers.JsonRpcProvider(env.coston2Rpc, COSTON2_CHAIN_ID);
+  const receipt = await provider.getTransactionReceipt(txHash);
+  if (!receipt) throw new Error("that submitRfq transaction is not mined yet");
+  if (receipt.status !== 1) throw new Error("that submitRfq transaction reverted");
+
+  const sender = new ethers.Contract(env.senderAddress, SENDER_ABI, provider);
+  const sealed = receipt.logs
+    .map((l) => {
+      try {
+        return sender.interface.parseLog(l);
+      } catch {
+        return null;
+      }
+    })
+    .find((e): e is ethers.LogDescription => e !== null && e.name === "SealedRfqSubmitted");
+  if (!sealed) throw new Error("no SealedRfqSubmitted in that receipt — wrong transaction?");
+
+  if ((sealed.args.taker as string).toLowerCase() !== takerAddress.toLowerCase()) {
+    throw new Error("that order was submitted by a different address");
+  }
+
+  const instructionId = sealed.args.instructionId as string;
+  const result = await pollActionResult(env.extProxyUrl, instructionId, { timeoutMs: 120_000 });
+  if (result.status !== 1) {
+    throw new Error(`RFQ_SUBMIT failed: status=${result.status} log=${JSON.stringify(result.log)}`);
+  }
+  const ack = decodeActionPayload<RfqAck>(result);
 
   putRfqRecord(ack.rfqId, ack.windowEndsAt);
   return { rfqId: ack.rfqId, windowEndsAt: ack.windowEndsAt };

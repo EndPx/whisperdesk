@@ -114,13 +114,43 @@ async function main() {
   log(`    deposit ${depositTx.hash}`);
 
   // ---- 3. Publish, and let a stranger find it -------------------------------------------------
-  step(5, "Publishing the sealed RFQ into the shared queue");
-  const pub = await post("/api/taker/rfq/publish", {
+  step(5, "Sealing the order, then submitting it FROM THE TAKER'S OWN WALLET");
+  const sealed = await post("/api/taker/rfq/publish", {
     taker: taker.address,
     xrplAddress: takerXrpl.address,
     fxrpAmountRaw: sizeRaw.toString(),
     limitPriceUsdE18: limitRaw.toString(),
   });
+
+  // The desk hands back a ciphertext and never submits it. submitRfq goes out from the taker's own
+  // key, so WhisperDeskInstructionSender writes the taker from msg.sender — an identity neither
+  // this script nor the desk can claim on someone else's behalf.
+  const senderC = new ethers.Contract(
+    sealed.senderAddress,
+    [
+      "function submitRfq(bytes ciphertext) payable returns (bytes32)",
+      "event SealedRfqSubmitted(bytes32 indexed instructionId, address indexed taker)",
+    ],
+    taker
+  );
+  const rfqRc = await (await senderC.submitRfq(sealed.ciphertext, { value: sealed.relayFeeWei })).wait();
+  const stamped = rfqRc.logs
+    .map((l) => {
+      try {
+        return senderC.interface.parseLog(l);
+      } catch {
+        return null;
+      }
+    })
+    .find((e) => e && e.name === "SealedRfqSubmitted");
+  if (!stamped) throw new Error("no SealedRfqSubmitted in the submitRfq receipt");
+  if (stamped.args.taker.toLowerCase() !== taker.address.toLowerCase()) {
+    throw new Error(`contract stamped ${stamped.args.taker}, not our taker`);
+  }
+  log(`    submitRfq ${rfqRc.hash}`);
+  log(`    taker stamped by the CONTRACT: ${stamped.args.taker}`);
+
+  const pub = await post("/api/taker/rfq/confirm", { txHash: rfqRc.hash, taker: taker.address });
   log(`    rfqId ${pub.rfqId}   window closes at ${new Date(pub.windowEndsAt * 1000).toISOString()}`);
 
   step(6, "Reading the queue as a maker would — no side, no size, no limit, no taker");

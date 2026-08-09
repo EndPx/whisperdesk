@@ -17,6 +17,7 @@ import {
   sendApprove,
   sendDeposit,
   sendLock,
+  sendSubmitRfq,
   WalletRejectionError,
 } from "@/lib/wallet-client";
 
@@ -486,22 +487,47 @@ export default function WalletMode({
       });
 
       setPublishStage("submitting");
-      const conf = await postJSON<{ rfqId: string; windowEndsAt: number; error?: string; enabled?: boolean }>(
-        "/api/taker/rfq/publish",
-        {
-          taker: address,
-          xrplAddress,
-          fxrpAmountRaw: sizeRaw.toString(),
-          limitPriceUsdE18: limitRaw.toString(),
-        }
-      );
-      if (conf.status === 503 || conf.data?.enabled === false) {
+      const sealed = await postJSON<{
+        ciphertext: string;
+        senderAddress: string;
+        relayFeeWei: string;
+        error?: string;
+        enabled?: boolean;
+      }>("/api/taker/rfq/publish", {
+        taker: address,
+        xrplAddress,
+        fxrpAmountRaw: sizeRaw.toString(),
+        limitPriceUsdE18: limitRaw.toString(),
+      });
+      if (sealed.status === 503 || sealed.data?.enabled === false) {
         setEnabled(false);
         setPublishStage("idle");
         return;
       }
-      if (!conf.ok || !conf.data?.rfqId) throw new Error(conf.data?.error ?? "the enclave did not ack the RFQ");
+      if (!sealed.ok || !sealed.data?.ciphertext) {
+        throw new Error(sealed.data?.error ?? "could not seal your order");
+      }
       addLog("Your order sealed to the enclave — you wrote it, and no maker can read it.", { tone: "muted" });
+
+      // Sent from YOUR wallet, not relayed by the desk: the contract writes the taker into the
+      // instruction from msg.sender, so nobody — this server included — can publish an order in
+      // your name.
+      const rfqTx = await sendSubmitRfq({
+        senderAddress: sealed.data.senderAddress,
+        ciphertext: sealed.data.ciphertext,
+        relayFeeWei: sealed.data.relayFeeWei,
+      });
+      addLog("submitRfq() sent from your wallet — the contract stamps you as the taker", {
+        href: COSTON2_TX(rfqTx),
+        linkText: shortHash(rfqTx),
+        tone: "success",
+      });
+
+      const conf = await postJSON<{ rfqId: string; windowEndsAt: number; error?: string }>(
+        "/api/taker/rfq/confirm",
+        { txHash: rfqTx, taker: address }
+      );
+      if (!conf.ok || !conf.data?.rfqId) throw new Error(conf.data?.error ?? "the enclave did not ack your order");
 
       setPublishedRfqId(conf.data.rfqId);
       setPublishStage("waiting");

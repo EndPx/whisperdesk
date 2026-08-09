@@ -195,12 +195,37 @@ export async function sendDeposit(
   });
 }
 
-// sendSubmitRfq lived here and is gone. It sent WhisperDeskInstructionSender.submitRfq from the
-// taker's own wallet, which stamped the taker from msg.sender — the strongest form of this ingress,
-// and still the canonical one in the contract. It routed through Flare's hosted FTDC proxy, which
-// stopped answering the machine-availability check (404), so nothing submitted that way reaches the
-// enclave today. The taker seat publishes over /direct instead; there it is the escrow rather than
-// the ingress that keeps a named taker honest — see api/taker/rfq/publish.
+/** Publishes a sealed RFQ from the taker's OWN wallet.
+ *
+ *  This one cannot be relayed on the visitor's behalf, which is why it lives client-side:
+ *  WhisperDeskInstructionSender writes the taker into the instruction envelope from `msg.sender`,
+ *  so the transaction has to originate from the wallet that owns the order. Sent from a desk key it
+ *  would produce an RFQ attributed to the desk — the exact forgery this ingress exists to prevent.
+ *
+ *  This was briefly deleted. Instructions reach the enclave through Flare's data providers, which
+ *  push to the URL recorded on-chain for our TEE machine — and ours read `http://localhost:6674`,
+ *  so nothing ever arrived and every submission 404'd. That was our own stale registration, not
+ *  Flare's infrastructure. `updateTeeMachineSettings` corrected it, the machine reached PRODUCTION,
+ *  and the path was re-proven before this came back: submitRfq tx 0xe57cb5ff…128e returned an
+ *  enclave ack with status 1.
+ *
+ *  Minimal inline ABI: the sender contract's surface used here is a single method, and importing
+ *  the server's full ABI would drag its dependencies into the bundle for no gain. */
+const SUBMIT_RFQ_ABI = ["function submitRfq(bytes ciphertext) payable returns (bytes32)"];
+
+export async function sendSubmitRfq(rfq: {
+  senderAddress: string;
+  ciphertext: string;
+  relayFeeWei: string;
+}): Promise<string> {
+  return withRejectionSurfaced(async () => {
+    const signer = await getSigner();
+    const sender = new Contract(rfq.senderAddress, SUBMIT_RFQ_ABI, signer);
+    const tx = await sender.submitRfq(rfq.ciphertext, { value: rfq.relayFeeWei });
+    const receipt = await tx.wait();
+    return receipt.hash as string;
+  });
+}
 
 export async function sendLock(lock: {
   to: string;

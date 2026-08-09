@@ -1,17 +1,24 @@
-// POST /api/taker/rfq/publish — seal the visitor's order and put it in the shared queue.
+// POST /api/taker/rfq/publish — seal the visitor's order for their own wallet to submit.
 //
-// This is the route where the desk stops being a counterparty. Everything else in the taker seat
-// trades against the house; here the order goes where a stranger can fill it, and the trade that
-// settles has an independent person on each side. The desk seals, relays, and pays gas for two
-// permissionless calls — it holds neither leg.
+// The ciphertext comes back rather than going out. submitRfq has to originate from the taker's own
+// wallet, because WhisperDeskInstructionSender writes the taker into the instruction envelope from
+// msg.sender — and that stamp is the whole reason a taker's identity cannot be claimed. Relaying it
+// from a desk key would produce an order attributed to the desk, precisely the forgery the onchain
+// ingress exists to prevent.
 //
-// The taker in the sealed envelope is self-attested on this ingress rather than stamped from
-// msg.sender. maker.ts's publishTakerRfq spells out exactly what that costs; the short version is
-// that it costs attribution, not safety, because lock() draws the FXRP from the named taker's own
-// armed deposit and pays the XRP to the address sealed beside it.
+// This route briefly submitted over POST /direct with a self-attested taker, after every onchain
+// submission began returning 404. That was our own TEE machine registered under
+// `http://localhost:6674`: Flare's data providers push to the URL recorded on-chain, so they were
+// pushing at a loopback address that meant nothing to them. Corrected with
+// updateTeeMachineSettings; the machine is PRODUCTION and an onchain submitRfq now returns an
+// enclave ack.
+//
+// The order's numbers are the taker's own, re-checked here against the two systems that enforce
+// them — the escrow's MIN_BLOCK_FXRP and the FTSOv2 band lock() re-reads — so an order that
+// provably cannot fill is refused before it costs anyone a signature.
 import { NextResponse } from "next/server";
 import { ethers } from "ethers";
-import { publishTakerRfq } from "@/lib/demo/maker";
+import { sealTakerRfq } from "@/lib/demo/maker";
 import { getMakerEnv } from "@/lib/demo/makerEnv";
 import { errMessage } from "@/lib/demo/http";
 import { checkAndConsume, clientIpFromHeaders } from "@/lib/demo/ratelimit";
@@ -42,9 +49,8 @@ export async function POST(request: Request) {
     }
     xrplAddress = body.xrplAddress;
 
-    // The order itself, in raw integer units — the taker's numbers, not the desk's. Decimal strings
-    // only: a JSON number silently loses precision on an 18-decimal price, and that rounding would
-    // land in the one field the entire trade is priced on.
+    // Decimal strings only: a JSON number silently loses precision on an 18-decimal price, and that
+    // rounding would land in the one field the entire trade is priced on.
     if (!/^[0-9]+$/.test(String(body?.fxrpAmountRaw ?? "")) || !/^[0-9]+$/.test(String(body?.limitPriceUsdE18 ?? ""))) {
       return NextResponse.json(
         { error: "body.fxrpAmountRaw and body.limitPriceUsdE18 must be decimal integer strings" },
@@ -65,11 +71,11 @@ export async function POST(request: Request) {
 
   try {
     return NextResponse.json(
-      await publishTakerRfq(env, taker, xrplAddress, fxrpAmountRaw, limitPriceUsdE18)
+      await sealTakerRfq(env, taker, xrplAddress, fxrpAmountRaw, limitPriceUsdE18)
     );
   } catch (err) {
-    // A rejected order is the caller's to fix — size under the block minimum, limit outside the band
-    // — so this answers 400 and names the bound that was missed rather than a blank 500.
+    // A rejected order is the caller's to fix — size under the block minimum, limit outside the
+    // band — so this answers 400 and names the bound that was missed rather than a blank 500.
     return NextResponse.json({ error: errMessage(err) }, { status: 400 });
   }
 }
