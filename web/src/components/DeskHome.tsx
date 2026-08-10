@@ -152,12 +152,16 @@ export default function DeskHome({
   onConnected,
   onPlaceOrder,
   onFillOrder,
+  tradeOpen = false,
 }: {
   address: string | null;
   hasProvider: boolean | null;
   onConnected: (addr: string) => void;
   onPlaceOrder: () => void;
   onFillOrder: () => void;
+  /** A trade is running below. The ticket stays visible — it is where you just were — but stops
+   *  offering to start another, which would read as a second, competing action. */
+  tradeOpen?: boolean;
 }) {
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
@@ -245,6 +249,13 @@ export default function DeskHome({
               onConnect={handleConnect}
               what="to write an order"
             />
+          ) : tradeOpen ? (
+            /* The ticket does not disappear while a trade runs — it is where you just were, and
+               removing it is exactly the page-change this layout exists to avoid. It simply stops
+               inviting a second order. */
+            <p className="mono-label text-[0.58rem] text-ink-3 text-center py-1.5 leading-relaxed">
+              Your trade is running below.
+            </p>
           ) : (
             <button
               type="button"

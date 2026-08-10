@@ -729,56 +729,14 @@ npm run happy-path`}
   // the product explain a concept instead of demonstrating it. Now the shell renders immediately,
   // the book is public, and the wallet gates only what signing requires. Picking an ACTION here is
   // what selects a flow; the role is a consequence, never a prompt.
-  if (!seated) {
-    return (
-      <AppShell
-        routes={[{ id: "desk", label: "Desk" }]}
-        active="desk"
-        onNavigate={() => {}}
-        address={address}
-        onDisconnect={
-          address
-            ? async () => {
-                await disconnect();
-                setAddress(null);
-              }
-            : undefined
-        }
-        figures={[
-          { label: "FXRP", token: "FXRP", value: account.fxrp, hint: "Your FAssets FXRP on Coston2" },
-          { label: "C2FLR", token: "C2FLR", value: account.c2flr, hint: "Gas. Not a position, so it carries no price." },
-          { label: "Network", value: "Coston2 · 114" },
-        ]}
-      >
-        <DeskHome
-          address={address}
-          hasProvider={hasProvider}
-          onConnected={setAddress}
-          onPlaceOrder={() => {
-            userPickedModeRef.current = true;
-            setMode("wallet");
-            setSeated(true);
-          }}
-          onFillOrder={() => {
-            userPickedModeRef.current = true;
-            setMode("maker");
-            setSeated(true);
-          }}
-        />
-        {/* Under the desk: the receipts for the asset every trade here settles. */}
-        <div className="mt-3">
-          <RealAssetProof />
-        </div>
-      </AppShell>
-    );
-  }
-
-  // The two seats are destinations in an application, not steps in a walkthrough. The old
-  // segmented control was structurally the same thing, but with no brand, no network, no account
-  // and no session around it a visitor met a bare panel above a log — which is why the screen read
-  // as a guided demo whatever the buttons were labelled. The shell answers where-am-I,
-  // what-can-I-do-here, which-chain and which-account before anything is clicked, and then stays
-  // put. Switching is blocked mid-settlement, where leaving would strand an open match.
+  // ONE render, always. There used to be two: a desk, and — the instant you acted — a different
+  // screen where the desk no longer existed. Even after the nav stopped changing, the ticket you
+  // had just used vanished and something else took its place, which is a page change however it is
+  // dressed.
+  //
+  // The desk is permanent now and the trade appears BENEATH it. The page grows instead of swapping,
+  // the ticket stays where you left it, and other people's orders keep arriving in the book while
+  // your own trade settles. Nothing you were looking at is taken away from you.
   return (
     <AppShell
       /* One destination, always. Splitting the nav into Trade / Make markets was the seat picker
@@ -791,6 +749,7 @@ npm run happy-path`}
       address={address}
       onDisconnect={async () => {
         await disconnect();
+        setAddress(null);
         setSeated(false);
         userPickedModeRef.current = false;
       }}
@@ -800,25 +759,33 @@ npm run happy-path`}
         { label: "Network", value: "Coston2 · 114" },
       ]}
     >
-      {/* The trade runs beside the book, never instead of it. Replacing the whole screen the moment
-          you act is what made this read as a wizard: you were somewhere else now, and the desk had
-          gone. Keeping the book mounted means other people's orders keep arriving in front of you
-          while your own trade settles — which is what a desk looks like, and is also the thing this
-          product is claiming. */}
-      {/* Above the trade, full width — not a third column. Both flows already render their own
-          right-hand rail, so squeezing the book in beside it produced three columns of chrome and a
-          cramped book. Here it stays legible and the trade below keeps the width it was designed
-          for, while other people's orders still arrive in front of you as yours settles. */}
-      <OpenOrdersBook
-        gated={!address}
-        compact
+      <DeskHome
+        address={address}
+        hasProvider={hasProvider}
+        onConnected={setAddress}
+        tradeOpen={seated}
+        onPlaceOrder={() => {
+          userPickedModeRef.current = true;
+          setMode("wallet");
+          setSeated(true);
+        }}
         onFillOrder={() => {
-          if (switcherDisabled) return; // mid-settlement; leaving would strand an open match
+          if (seated && switcherDisabled) return; // mid-settlement; leaving would strand a match
           userPickedModeRef.current = true;
           setMode("maker");
+          setSeated(true);
         }}
       />
 
+      {!seated && (
+        /* Shown only on an idle desk: the receipts for the asset every trade here settles. Once a
+           trade is running it would push the thing you are actually watching further down. */
+        <div className="mt-3">
+          <RealAssetProof />
+        </div>
+      )}
+
+      {seated && (
       <div className="mt-3">
         {/* No onSwitchToOneClick any more. The one-click seat was deleted from the door because it
             proved nothing about a counterparty — but both flows still carried buttons back into it,
@@ -830,6 +797,7 @@ npm run happy-path`}
           <MakerMode onBusyChange={setMakerBusy} />
         )}
       </div>
+      )}
     </AppShell>
   );
 }
